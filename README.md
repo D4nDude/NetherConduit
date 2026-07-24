@@ -2,6 +2,7 @@
 
 A Minecraft proxy written in Rust.
 
+> [!WARNING]
 > PRE-ALPHA — NOT READY FOR PRODUCTION USE
 
 ## Overview
