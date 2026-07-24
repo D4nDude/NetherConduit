@@ -1,0 +1,7 @@
+[package]
+name = "netherconduit"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+netherconduit-core = { version = "0.1.0", path = "../netherconduit-core" }
