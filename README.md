@@ -25,9 +25,10 @@ This roadmap outlines planned features and may change as the project develops.
 
 - [ ] Protocol Primitives
 - [ ] Basic Relay:
-  - [ ] Accept TCP connections from clients
-  - [ ] Connect to a single hardcoded backend
-  - [ ] Bidirectional relay
+  - [x] Accept TCP connections from clients
+  - [x] Connect to a single hardcoded backend
+  - [x] Bidirectional relay
+  - [ ] Allow Auth/Encrypting
 - [ ] Packet Inspection:
   - [ ] Parse packet types
   - [ ] State-aware packet parsing

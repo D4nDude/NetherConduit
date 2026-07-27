@@ -12,4 +12,8 @@ impl RawPacket {
     pub fn new(data: BytesMut) -> RawPacket {
         RawPacket { data }
     }
+
+    pub fn get_data(self) -> BytesMut {
+        self.data
+    }
 }

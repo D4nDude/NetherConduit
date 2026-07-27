@@ -1,6 +1,5 @@
 #[allow(dead_code)]
 pub fn peak_varint(buffer: &[u8]) -> Option<(i32, usize)> {
-    log::trace!("Reading Var Int");
     let mut cursor: usize = 0;
     let mut value: u32 = 0;
 
