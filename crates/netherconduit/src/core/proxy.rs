@@ -8,6 +8,7 @@ use crate::connection::player_connection::PlayerConnection;
 pub(crate) struct ProxyConfig {
     address: &'static str,
     port: u16,
+    default_server: &'static str,
 }
 
 impl ProxyConfig {
@@ -15,6 +16,7 @@ impl ProxyConfig {
         ProxyConfig {
             address: "127.0.0.1",
             port: 25565,
+            default_server: "localhost:25566",
         }
     }
 }
@@ -27,7 +29,7 @@ pub(crate) async fn start_proxy(config: ProxyConfig) {
 
     while let Ok((stream, socket)) = listener.accept().await {
         info!("New Client Connection from: {:#?}", socket);
-        let connection_handler = PlayerConnection::new(stream).await;
+        let connection_handler = PlayerConnection::new(stream, config.default_server).await;
         tokio::spawn(connection_handler.dispatch());
     }
 }

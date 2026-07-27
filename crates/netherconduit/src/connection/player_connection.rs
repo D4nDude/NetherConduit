@@ -8,9 +8,9 @@ pub(crate) struct PlayerConnection {
 }
 
 impl PlayerConnection {
-    pub(crate) async fn new(stream: TcpStream) -> PlayerConnection {
+    pub(crate) async fn new(stream: TcpStream, target: &str) -> PlayerConnection {
         let (player_read_side, player_write_side) = stream.into_split();
-        let server_connection = TcpStream::connect("localhost:25566").await.unwrap();
+        let server_connection = TcpStream::connect(target).await.unwrap();
         let (server_read_side, server_write_side) = server_connection.into_split();
 
         let player_handler = ConnectionHandler::new(
