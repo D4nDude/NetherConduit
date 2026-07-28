@@ -28,7 +28,7 @@ impl Decoder for MinecraftPacketDecoder {
             None => return Ok(None), // not enough data for a varint
         };
 
-        let packet_length = length as usize + int_size;
+        let packet_length = usize::try_from(length).unwrap() + int_size;
 
         // incomplete packet
         if src.len() < packet_length {

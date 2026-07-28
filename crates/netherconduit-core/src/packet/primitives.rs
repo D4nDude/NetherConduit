@@ -1,5 +1,56 @@
+// Custom Datatypes
+
+use std::num::TryFromIntError;
+
+use bytes::{BufMut, BytesMut};
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct VarInt(i32);
+
+impl VarInt {
+    pub fn new(value: i32) -> VarInt {
+        VarInt(value)
+    }
+
+    // Encode the value of the VarInt into the Buffer.
+    // Returns number of bytes written.
+    pub fn encode(self, buffer: &mut BytesMut) -> usize {
+        let VarInt(value) = self;
+        let mut value = value as u32;
+        let mut count = 1;
+        while (value & !0x7f) != 0 {
+            buffer.put_u8(((value & 0x7f) as u8) | 0x80);
+            value >>= 7;
+            count += 1;
+            debug_assert!(count <= 5);
+        }
+        buffer.put_u8((value & 0x7f) as u8);
+        count
+    }
+}
+
+impl Default for VarInt {
+    fn default() -> Self {
+        Self::new(0)
+    }
+}
+
+impl From<i32> for VarInt {
+    fn from(value: i32) -> Self {
+        VarInt(value)
+    }
+}
+
+impl TryFrom<VarInt> for usize {
+    type Error = TryFromIntError;
+    fn try_from(value: VarInt) -> Result<Self, Self::Error> {
+        let VarInt(value) = value;
+        usize::try_from(value)
+    }
+}
+
 #[allow(dead_code)]
-pub fn peak_varint(buffer: &[u8]) -> Option<(i32, usize)> {
+pub fn peak_varint(buffer: &[u8]) -> Option<(VarInt, usize)> {
     let mut cursor: usize = 0;
     let mut value: u32 = 0;
 
@@ -9,7 +60,7 @@ pub fn peak_varint(buffer: &[u8]) -> Option<(i32, usize)> {
         value |= ((current_byte & 0x7F) as u32) << position;
 
         if (current_byte & 0x80) == 0 {
-            return Some((value.cast_signed(), cursor + 1));
+            return Some((VarInt(value.cast_signed()), cursor + 1));
         }
 
         position += 7;
@@ -21,79 +72,178 @@ pub fn peak_varint(buffer: &[u8]) -> Option<(i32, usize)> {
 #[cfg(test)]
 mod test {
 
+    mod var_int {
+        mod encode {
+            use bytes::BytesMut;
+
+            use super::super::super::VarInt;
+
+            #[test]
+            fn zero() {
+                let mut test_buffer: BytesMut = BytesMut::with_capacity(1);
+                let test_number = VarInt(0);
+                let length = test_number.encode(&mut test_buffer);
+                assert_eq!(1, length);
+                assert_eq!([0x00], test_buffer.as_ref());
+            }
+
+            #[test]
+            fn one() {
+                let mut test_buffer: BytesMut = BytesMut::with_capacity(1);
+                let test_number = VarInt(1);
+                let length = test_number.encode(&mut test_buffer);
+                assert_eq!(1, length);
+                assert_eq!([0x01], test_buffer.as_ref());
+            }
+
+            #[test]
+            fn max_byte() {
+                let mut test_buffer: BytesMut = BytesMut::with_capacity(1);
+                let test_number = VarInt(127);
+                let length = test_number.encode(&mut test_buffer);
+                assert_eq!(1, length);
+                assert_eq!([0x7f], test_buffer.as_ref());
+            }
+
+            #[test]
+            fn carry() {
+                let mut test_buffer: BytesMut = BytesMut::with_capacity(2);
+                let test_number = VarInt(128);
+                let length = test_number.encode(&mut test_buffer);
+                assert_eq!(2, length);
+                assert_eq!([0x80, 0x01], test_buffer.as_ref());
+            }
+
+            #[test]
+            fn max_with_carry() {
+                let mut test_buffer: BytesMut = BytesMut::with_capacity(2);
+                let test_number = VarInt(255);
+                let length = test_number.encode(&mut test_buffer);
+                assert_eq!(2, length);
+                assert_eq!([0xff, 0x01], test_buffer.as_ref());
+            }
+
+            #[test]
+            fn mc_port_3_bytes() {
+                let mut test_buffer: BytesMut = BytesMut::with_capacity(3);
+                let test_number = VarInt(25565);
+                let length = test_number.encode(&mut test_buffer);
+                assert_eq!(3, length);
+                assert_eq!([0xdd, 0xc7, 0x01], test_buffer.as_ref());
+            }
+
+            #[test]
+            fn max_3_bytes() {
+                let mut test_buffer: BytesMut = BytesMut::with_capacity(3);
+                let test_number = VarInt(2097151);
+                let length = test_number.encode(&mut test_buffer);
+                assert_eq!(3, length);
+                assert_eq!([0xff, 0xff, 0x7f], test_buffer.as_ref());
+            }
+
+            #[test]
+            fn max_int() {
+                let mut test_buffer: BytesMut = BytesMut::with_capacity(5);
+                let test_number = VarInt(2147483647);
+                let length = test_number.encode(&mut test_buffer);
+                assert_eq!(5, length);
+                assert_eq!([0xff, 0xff, 0xff, 0xff, 0x07], test_buffer.as_ref());
+            }
+
+            #[test]
+            fn negative_one() {
+                let mut test_buffer: BytesMut = BytesMut::with_capacity(5);
+                let test_number = VarInt(-1);
+                let length = test_number.encode(&mut test_buffer);
+                assert_eq!(5, length);
+                assert_eq!([0xff, 0xff, 0xff, 0xff, 0x0f], test_buffer.as_ref());
+            }
+
+            #[test]
+            fn min_int() {
+                let mut test_buffer: BytesMut = BytesMut::with_capacity(5);
+                let test_number = VarInt(-2147483648);
+                let length = test_number.encode(&mut test_buffer);
+                assert_eq!(5, length);
+                assert_eq!([0x80, 0x80, 0x80, 0x80, 0x08], test_buffer.as_ref());
+            }
+        }
+    }
+
     mod peak_var_int {
         use std::assert_matches;
 
+        use super::super::VarInt;
         use crate::packet::primitives::peak_varint;
 
         #[test]
         fn zero() {
             let test_buffer: Vec<u8> = vec![0x00];
             let result = peak_varint(&test_buffer).unwrap();
-            assert_eq!(result, (0, 1));
+            assert_eq!(result, (VarInt(0), 1));
         }
 
         #[test]
         fn one() {
             let test_buffer: Vec<u8> = vec![0x01];
             let result = peak_varint(&test_buffer).unwrap();
-            assert_eq!(result, (1, 1));
+            assert_eq!(result, (VarInt(1), 1));
         }
 
         #[test]
         fn max_byte() {
             let test_buffer: Vec<u8> = vec![0x7f];
             let result = peak_varint(&test_buffer).unwrap();
-            assert_eq!(result, (127, 1));
+            assert_eq!(result, (VarInt(127), 1));
         }
 
         #[test]
         fn carry() {
             let test_buffer: Vec<u8> = vec![0x80, 0x01];
             let result = peak_varint(&test_buffer).unwrap();
-            assert_eq!(result, (128, 2));
+            assert_eq!(result, (VarInt(128), 2));
         }
 
         #[test]
         fn max_with_carry() {
             let test_buffer: Vec<u8> = vec![0xff, 0x01];
             let result = peak_varint(&test_buffer).unwrap();
-            assert_eq!(result, (255, 2));
+            assert_eq!(result, (VarInt(255), 2));
         }
 
         #[test]
         fn mc_port_3_bytes() {
             let test_buffer: Vec<u8> = vec![0xdd, 0xc7, 0x01];
             let result = peak_varint(&test_buffer).unwrap();
-            assert_eq!(result, (25565, 3));
+            assert_eq!(result, (VarInt(25565), 3));
         }
 
         #[test]
         fn max_3_bytes() {
             let test_buffer: Vec<u8> = vec![0xff, 0xff, 0x7f];
             let result = peak_varint(&test_buffer).unwrap();
-            assert_eq!(result, (2097151, 3));
+            assert_eq!(result, (VarInt(2097151), 3));
         }
 
         #[test]
         fn max_int() {
             let test_buffer: Vec<u8> = vec![0xff, 0xff, 0xff, 0xff, 0x07];
             let result = peak_varint(&test_buffer).unwrap();
-            assert_eq!(result, (2147483647, 5));
+            assert_eq!(result, (VarInt(2147483647), 5));
         }
 
         #[test]
         fn negative_one() {
             let test_buffer: Vec<u8> = vec![0xff, 0xff, 0xff, 0xff, 0x0f];
             let result = peak_varint(&test_buffer).unwrap();
-            assert_eq!(result, (-1, 5));
+            assert_eq!(result, (VarInt(-1), 5));
         }
 
         #[test]
         fn min_int() {
             let test_buffer: Vec<u8> = vec![0x80, 0x80, 0x80, 0x80, 0x08];
             let result = peak_varint(&test_buffer).unwrap();
-            assert_eq!(result, (-2147483648, 5));
+            assert_eq!(result, (VarInt(-2147483648), 5));
         }
 
         #[test]
