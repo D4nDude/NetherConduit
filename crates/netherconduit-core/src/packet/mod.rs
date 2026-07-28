@@ -24,6 +24,10 @@ impl RawPacket {
     pub fn len(&self) -> usize {
         self.id.get_encoded_length() + self.payload.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.payload.is_empty()
+    }
 }
 
 impl Display for RawPacket {

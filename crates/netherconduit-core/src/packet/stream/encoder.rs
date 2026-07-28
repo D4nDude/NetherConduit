@@ -28,12 +28,11 @@ impl Encoder<RawPacket> for MinecraftPacketEncoder {
     }
 }
 
+#[cfg(test)]
 mod test {
     use super::MinecraftPacketEncoder;
     use crate::packet::RawPacket;
-    use crate::packet::primitives::VarInt;
-    use bytes::{BufMut, Bytes, BytesMut};
-    use std::assert_matches;
+    use bytes::{BufMut, BytesMut};
     use tokio_util::codec::Encoder;
 
     #[test]

@@ -2,7 +2,7 @@
 
 use std::{fmt::Display, num::TryFromIntError};
 
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{BufMut, BytesMut};
 
 use crate::packet::stream::{Decode, Encode, decoder::DecodeError};
 
@@ -21,7 +21,7 @@ impl VarInt {
 
 impl Encode for VarInt {
     fn encode(&self, buffer: &mut BytesMut) -> usize {
-        let mut value: u32 = self.value().clone() as u32;
+        let mut value: u32 = self.value() as u32;
         let mut count = 1;
         while (value & !0x7f) != 0 {
             buffer.put_u8(((value & 0x7f) as u8) | 0x80);

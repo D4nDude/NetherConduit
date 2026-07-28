@@ -1,13 +1,10 @@
 // Connection handler
 use futures::sink::SinkExt;
-use log::{debug, error, info, warn};
+use log::{error, info, warn};
 use netherconduit_core::packet::stream::{
     decoder::MinecraftPacketDecoder, encoder::MinecraftPacketEncoder,
 };
-use tokio::{
-    io::AsyncWriteExt,
-    net::tcp::{OwnedReadHalf, OwnedWriteHalf},
-};
+use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio_stream::StreamExt;
 use tokio_util::codec::{FramedRead, FramedWrite};
 

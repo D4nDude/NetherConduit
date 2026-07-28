@@ -25,10 +25,7 @@ pub trait Decode: Sized {
 mod test {
     use super::decoder::MinecraftPacketDecoder;
     use super::encoder::MinecraftPacketEncoder;
-    use crate::packet::primitives::VarInt;
-    use crate::packet::{RawPacket, stream::encoder};
     use bytes::{BufMut, BytesMut};
-    use std::assert_matches;
     use tokio_util::codec::Decoder;
     use tokio_util::codec::Encoder;
 

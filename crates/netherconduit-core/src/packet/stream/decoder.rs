@@ -15,13 +15,13 @@ impl From<DecodeError> for std::io::Error {
     fn from(value: DecodeError) -> Self {
         match value {
             DecodeError::Incomplete => std::io::Error::new(
-                    std::io::ErrorKind::UnexpectedEof,
-                    "Not enough data to create value",
-                ),
+                std::io::ErrorKind::UnexpectedEof,
+                "Not enough data to create value",
+            ),
             DecodeError::Invalid => std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Invalid data format for value",
-                ),
+                std::io::ErrorKind::InvalidData,
+                "Invalid data format for value",
+            ),
         }
     }
 }
