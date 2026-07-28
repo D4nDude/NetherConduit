@@ -1,12 +1,15 @@
 // Connection handler
-use log::{error, info};
-use netherconduit_core::packet::stream::decoder::MinecraftPacketDecoder;
+use futures::sink::SinkExt;
+use log::{debug, error, info, warn};
+use netherconduit_core::packet::stream::{
+    decoder::MinecraftPacketDecoder, encoder::MinecraftPacketEncoder,
+};
 use tokio::{
     io::AsyncWriteExt,
     net::tcp::{OwnedReadHalf, OwnedWriteHalf},
 };
 use tokio_stream::StreamExt;
-use tokio_util::codec::FramedRead;
+use tokio_util::codec::{FramedRead, FramedWrite};
 
 pub(crate) mod player_connection;
 
@@ -45,9 +48,11 @@ impl ConnectionHandler {
         }
     }
 
-    pub(crate) async fn handle(mut self) {
+    pub(crate) async fn handle(self) {
         let decoder = MinecraftPacketDecoder::new();
         let mut reader = FramedRead::new(self.read_stream, decoder);
+        let encoder = MinecraftPacketEncoder::new();
+        let mut writer = FramedWrite::new(self.write_stream, encoder);
 
         while let Some(result) = reader.next().await {
             let packet = match result {
@@ -57,11 +62,9 @@ impl ConnectionHandler {
                     break;
                 }
             };
-            info!("{:#?} Packet Recieved: {:#?}", self.side, packet);
-            self.write_stream
-                .write_all(packet.get_data().as_ref())
-                .await
-                .unwrap();
+            info!("{:#?} Packet Recieved: {}", self.side, packet);
+            writer.send(packet).await.unwrap();
         }
+        warn!("Disconnected");
     }
 }
