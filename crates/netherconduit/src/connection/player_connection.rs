@@ -22,10 +22,9 @@ impl PlayerConnectionError {
 
 impl PlayerConnection {
     pub(crate) async fn new(
-        stream: TcpStream,
+        player_stream: TcpStream,
         target: &str,
     ) -> Result<PlayerConnection, PlayerConnectionError> {
-        let (player_read_side, player_write_side) = stream.into_split();
         let server_connection = match TcpStream::connect(target).await {
             Ok(conn) => conn,
             Err(e) => {
@@ -33,18 +32,16 @@ impl PlayerConnection {
                 return Err(PlayerConnectionError::new(e));
             }
         };
-        let (server_read_side, server_write_side) = server_connection.into_split();
 
-        let player_handler = ConnectionHandler::new(
-            player_read_side,
-            server_write_side,
-            ConnectionSide::PlayerToServer,
-        );
+        let mut player_handler =
+            ConnectionHandler::new(player_stream, ConnectionSide::PlayerToServer, None);
         let server_handler = ConnectionHandler::new(
-            server_read_side,
-            player_write_side,
+            server_connection,
             ConnectionSide::ServerToPlayer,
+            Some(player_handler.get_connection_send_queue()),
         );
+        player_handler
+            .set_connection_recieve_forward_queue(server_handler.get_connection_send_queue());
         Ok(PlayerConnection {
             player_handler,
             server_handler,

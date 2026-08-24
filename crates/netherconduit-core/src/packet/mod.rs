@@ -7,7 +7,7 @@ use crate::packet::{primitives::VarInt, stream::Encode};
 pub mod primitives;
 pub mod stream;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RawPacket {
     pub id: VarInt,
     pub payload: BytesMut,
@@ -34,4 +34,14 @@ impl Display for RawPacket {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "(id:{},0x{:x})", self.id, self.payload)
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ConnectionState {
+    Handshake,
+    Status,
+    Login,
+    Configuration,
+    Play,
+    Closed,
 }
