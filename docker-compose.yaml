@@ -17,5 +17,6 @@ services:
     stdin_open: true
     environment:
       EULA: "TRUE"
+      ONLINE_MODE: "FALSE"
     volumes:
       - "./minecraft-server:/data"

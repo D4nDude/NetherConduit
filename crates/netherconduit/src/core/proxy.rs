@@ -8,7 +8,7 @@ use std::{
 };
 use tokio::net::TcpListener;
 
-use crate::connection::player_connection::PlayerConnection;
+use crate::connection::player_connection::PlayerConnectionManager;
 
 #[derive(Debug)]
 pub(crate) struct ProxyConfig {
@@ -57,8 +57,8 @@ pub(crate) async fn start_proxy(config: ProxyConfig) {
 
     while let Ok((stream, socket)) = listener.accept().await {
         info!("New Client Connection from: {:#?}", socket);
-        let _joinhandle = match PlayerConnection::new(stream, &config.default_server).await {
-            Ok(connection_handler) => tokio::spawn(connection_handler.dispatch()),
+        let _joinhandle = match PlayerConnectionManager::new(stream, &config.default_server).await {
+            Ok(connection_handler) => tokio::spawn(connection_handler.handle()),
             Err(e) => {
                 log::error!("Could not Establish connection: {:?}", e.error);
                 continue;
