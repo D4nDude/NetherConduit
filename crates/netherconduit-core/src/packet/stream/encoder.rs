@@ -3,7 +3,7 @@ use tokio_util::codec::Encoder;
 
 use crate::packet::RawPacket;
 use crate::packet::primitives::VarInt;
-use crate::packet::stream::Encode;
+use crate::packet::stream::RawPacketEncodable;
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct MinecraftPacketEncoder {}
@@ -19,7 +19,7 @@ impl Encoder<RawPacket> for MinecraftPacketEncoder {
 
     fn encode(&mut self, item: RawPacket, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let packet_length = VarInt::new(i32::try_from(item.data.len()).unwrap());
-        packet_length.encode(dst);
+        packet_length.encode(dst).unwrap();
         dst.extend(item.data);
         Ok(())
     }
@@ -77,6 +77,4 @@ mod test {
         expected_result.extend(vec![0x11; 18]);
         assert_eq!(test_output, expected_result);
     }
-
-    // vec![0x008606096c6f63616c686f73741ec601]
 }

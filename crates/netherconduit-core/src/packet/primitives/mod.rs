@@ -1,6 +1,6 @@
 // Custom Datatypes
 
-mod int;
+mod number;
 mod string;
 mod var_int;
 

@@ -1,11 +1,9 @@
-use std::num::TryFromIntError;
-
 use bytes::{Buf, BytesMut};
 use tokio_util::codec::Decoder;
 
 use crate::packet::RawPacket;
 use crate::packet::primitives::VarInt;
-use crate::packet::stream::{Decode, DecodeError};
+use crate::packet::stream::{DecodeError, RawPacketDecodable};
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct MinecraftPacketDecoder {}
@@ -24,10 +22,10 @@ impl Decoder for MinecraftPacketDecoder {
         let (packet_length, int_size) = match VarInt::decode(src) {
             Ok(value) => value,
             Err(DecodeError::Incomplete) => return Ok(None), // not enough data for a varint
-            Err(DecodeError::Invalid) => {
+            Err(DecodeError::Invalid(error)) => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    "Packet Length is invalid value",
+                    format!("Packet Length is invalid value: {error}"),
                 ));
             }
         };

@@ -1,18 +1,19 @@
 use bytes::{Buf, BytesMut};
 
 pub use error::DecodeError;
+pub use error::EncodeError;
 
 pub mod decoder;
 pub mod encoder;
 mod error;
 
-pub trait Encode {
+pub trait RawPacketEncodable {
     // Encodes Self into the Buffer
-    fn encode(&self, buffer: &mut BytesMut) -> usize;
+    fn encode(&self, buffer: &mut BytesMut) -> Result<usize, EncodeError>;
     fn get_encoded_length(&self) -> usize;
 }
 
-pub trait Decode: Sized {
+pub trait RawPacketDecodable: Sized {
     fn decode(buffer: &[u8]) -> Result<(Self, usize), DecodeError>;
 
     fn decode_consuming_buffer(buffer: &mut BytesMut) -> Result<(Self, usize), DecodeError> {
@@ -100,25 +101,6 @@ mod test {
         assert_eq!(test_data, test_output);
     }
 
-    // #[test]
-    // fn double_well_sized_packets() {
-    //     let mut decoder = MinecraftPacketDecoder::new();
-
-    //     let mut test_data: BytesMut = BytesMut::from(&[0x10; 17][..]);
-    //     test_data.put_bytes(0x11, 18);
-
-    //     let output_packet = decoder.decode(&mut test_data).unwrap().unwrap();
-    //     assert_eq!(
-    //         output_packet,
-    //         RawPacket::new(VarInt::new(16), BytesMut::from(&[0x10; 15][..]))
-    //     );
-    //     let output_packet = decoder.decode(&mut test_data).unwrap().unwrap();
-    //     assert_eq!(
-    //         output_packet,
-    //         RawPacket::new(VarInt::new(17), BytesMut::from(&[0x11; 16][..]))
-    //     );
-    // }
-
     #[test]
     fn double_well_sized_packets() {
         // Setup codec
@@ -142,6 +124,4 @@ mod test {
 
         assert_eq!(test_data, test_output);
     }
-
-    // vec![0x008606096c6f63616c686f73741ec601]
 }

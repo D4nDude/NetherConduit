@@ -2,7 +2,7 @@ use std::{fmt::Display, num::TryFromIntError};
 
 use bytes::{BufMut, BytesMut};
 
-use crate::packet::stream::{Decode, Encode, DecodeError};
+use crate::packet::stream::{DecodeError, EncodeError, RawPacketDecodable, RawPacketEncodable};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct VarInt(i32);
@@ -17,8 +17,8 @@ impl VarInt {
     }
 }
 
-impl Encode for VarInt {
-    fn encode(&self, buffer: &mut BytesMut) -> usize {
+impl RawPacketEncodable for VarInt {
+    fn encode(&self, buffer: &mut BytesMut) -> Result<usize, EncodeError> {
         let mut value: u32 = self.value() as u32;
         let mut count = 1;
         while (value & !0x7f) != 0 {
@@ -28,26 +28,30 @@ impl Encode for VarInt {
             debug_assert!(count <= 5);
         }
         buffer.put_u8((value & 0x7f) as u8);
-        count
+        Ok(count)
     }
 
     fn get_encoded_length(&self) -> usize {
         let value: u32 = self.value() as u32;
-        if value < 0x80 {
-            1
-        } else if value < 0x4000 {
-            2
-        } else if value < 0x20_0000 {
-            3
-        } else if value < 0x1000_0000 {
-            4
-        } else {
-            5
-        }
+        get_var_int_encoded_length(value)
     }
 }
 
-impl Decode for VarInt {
+pub fn get_var_int_encoded_length(value: u32) -> usize {
+    if value < 0x80 {
+        1
+    } else if value < 0x4000 {
+        2
+    } else if value < 0x20_0000 {
+        3
+    } else if value < 0x1000_0000 {
+        4
+    } else {
+        5
+    }
+}
+
+impl RawPacketDecodable for VarInt {
     fn decode(buffer: &[u8]) -> Result<(VarInt, usize), DecodeError> {
         let mut value: u32 = 0;
 
@@ -65,7 +69,7 @@ impl Decode for VarInt {
 
             position += 7;
         }
-        Err(DecodeError::Invalid)
+        Err(DecodeError::Invalid("VarInt is too long".to_string()))
     }
 }
 
@@ -101,13 +105,13 @@ mod test {
         use bytes::BytesMut;
 
         use super::super::VarInt;
-        use crate::packet::stream::Encode;
+        use crate::packet::stream::RawPacketEncodable;
 
         #[test]
         fn zero() {
             let mut test_buffer: BytesMut = BytesMut::with_capacity(1);
             let test_number = VarInt(0);
-            let length = test_number.encode(&mut test_buffer);
+            let length = test_number.encode(&mut test_buffer).unwrap();
             assert_eq!(1, length);
             assert_eq!([0x00], test_buffer.as_ref());
         }
@@ -116,7 +120,7 @@ mod test {
         fn one() {
             let mut test_buffer: BytesMut = BytesMut::with_capacity(1);
             let test_number = VarInt(1);
-            let length = test_number.encode(&mut test_buffer);
+            let length = test_number.encode(&mut test_buffer).unwrap();
             assert_eq!(1, length);
             assert_eq!(1, test_number.get_encoded_length());
             assert_eq!([0x01], test_buffer.as_ref());
@@ -126,7 +130,7 @@ mod test {
         fn max_byte() {
             let mut test_buffer: BytesMut = BytesMut::with_capacity(1);
             let test_number = VarInt(127);
-            let length = test_number.encode(&mut test_buffer);
+            let length = test_number.encode(&mut test_buffer).unwrap();
             assert_eq!(1, length);
             assert_eq!(1, test_number.get_encoded_length());
             assert_eq!([0x7f], test_buffer.as_ref());
@@ -136,7 +140,7 @@ mod test {
         fn carry() {
             let mut test_buffer: BytesMut = BytesMut::with_capacity(2);
             let test_number = VarInt(128);
-            let length = test_number.encode(&mut test_buffer);
+            let length = test_number.encode(&mut test_buffer).unwrap();
             assert_eq!(2, length);
             assert_eq!(2, test_number.get_encoded_length());
             assert_eq!([0x80, 0x01], test_buffer.as_ref());
@@ -146,7 +150,7 @@ mod test {
         fn max_with_carry() {
             let mut test_buffer: BytesMut = BytesMut::with_capacity(2);
             let test_number = VarInt(255);
-            let length = test_number.encode(&mut test_buffer);
+            let length = test_number.encode(&mut test_buffer).unwrap();
             assert_eq!(2, length);
             assert_eq!(2, test_number.get_encoded_length());
             assert_eq!([0xff, 0x01], test_buffer.as_ref());
@@ -156,7 +160,7 @@ mod test {
         fn mc_port_3_bytes() {
             let mut test_buffer: BytesMut = BytesMut::with_capacity(3);
             let test_number = VarInt(25565);
-            let length = test_number.encode(&mut test_buffer);
+            let length = test_number.encode(&mut test_buffer).unwrap();
             assert_eq!(3, length);
             assert_eq!(3, test_number.get_encoded_length());
             assert_eq!([0xdd, 0xc7, 0x01], test_buffer.as_ref());
@@ -166,7 +170,7 @@ mod test {
         fn max_3_bytes() {
             let mut test_buffer: BytesMut = BytesMut::with_capacity(3);
             let test_number = VarInt(2097151);
-            let length = test_number.encode(&mut test_buffer);
+            let length = test_number.encode(&mut test_buffer).unwrap();
             assert_eq!(3, length);
             assert_eq!(3, test_number.get_encoded_length());
             assert_eq!([0xff, 0xff, 0x7f], test_buffer.as_ref());
@@ -176,7 +180,7 @@ mod test {
         fn max_int() {
             let mut test_buffer: BytesMut = BytesMut::with_capacity(5);
             let test_number = VarInt(2147483647);
-            let length = test_number.encode(&mut test_buffer);
+            let length = test_number.encode(&mut test_buffer).unwrap();
             assert_eq!(5, length);
             assert_eq!(5, test_number.get_encoded_length());
             assert_eq!([0xff, 0xff, 0xff, 0xff, 0x07], test_buffer.as_ref());
@@ -186,7 +190,7 @@ mod test {
         fn negative_one() {
             let mut test_buffer: BytesMut = BytesMut::with_capacity(5);
             let test_number = VarInt(-1);
-            let length = test_number.encode(&mut test_buffer);
+            let length = test_number.encode(&mut test_buffer).unwrap();
             assert_eq!(5, length);
             assert_eq!(5, test_number.get_encoded_length());
             assert_eq!([0xff, 0xff, 0xff, 0xff, 0x0f], test_buffer.as_ref());
@@ -196,7 +200,7 @@ mod test {
         fn min_int() {
             let mut test_buffer: BytesMut = BytesMut::with_capacity(5);
             let test_number = VarInt(-2147483648);
-            let length = test_number.encode(&mut test_buffer);
+            let length = test_number.encode(&mut test_buffer).unwrap();
             assert_eq!(5, length);
             assert_eq!(5, test_number.get_encoded_length());
             assert_eq!([0x80, 0x80, 0x80, 0x80, 0x08], test_buffer.as_ref());
@@ -206,7 +210,7 @@ mod test {
         use std::assert_matches;
 
         use super::super::VarInt;
-        use crate::packet::stream::{Decode, DecodeError};
+        use crate::packet::stream::{DecodeError, RawPacketDecodable};
 
         #[test]
         fn zero() {
@@ -289,7 +293,10 @@ mod test {
         fn too_long() {
             let test_buffer: Vec<u8> = vec![0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f];
             let result = VarInt::decode(&test_buffer);
-            assert_matches!(result, Err(DecodeError::Invalid));
+            assert_eq!(
+                result,
+                Err(DecodeError::Invalid("VarInt is too long".to_string()))
+            );
         }
     }
 }
