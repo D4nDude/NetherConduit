@@ -3,7 +3,10 @@ use std::io::Error;
 use netherconduit_core::packet::{ConnectionState, RawPacket};
 use tokio::net::TcpStream;
 
-use crate::connection::{Connection, ConnectionHandle};
+use crate::{
+    backend::{ProxyBackend, ProxyBackendHandle, ProxyServerBackend},
+    connection::{Connection, ConnectionHandle},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub(crate) enum PacketAction {
@@ -17,8 +20,8 @@ pub(crate) struct PlayerConnectionManager {
     state: ConnectionState,
     player_connection: Connection,
     player_handler: ConnectionHandle,
-    server_connection: Connection,
-    server_handler: ConnectionHandle,
+    connection_backend: Box<dyn ProxyBackend>,
+    connection_backend_handle: Option<ProxyBackendHandle>,
 }
 
 #[derive(Debug)]
@@ -35,37 +38,30 @@ impl PlayerConnectionError {
 impl PlayerConnectionManager {
     pub(crate) async fn new(
         player_stream: TcpStream,
-        target: &str,
+        target_server: &str,
+        target_port: u16,
     ) -> Result<PlayerConnectionManager, PlayerConnectionError> {
-        let server_connection = match TcpStream::connect(target).await {
-            Ok(conn) => conn,
-            Err(e) => {
-                log::error!("Cannot Connect to backend server: {}", e.kind());
-                return Err(PlayerConnectionError::new(e));
-            }
-        };
-
         let (player_connection, player_handler) = Connection::new(player_stream);
-        let (server_connection, server_handler) = Connection::new(server_connection);
+        let server_backend = ProxyServerBackend::new(target_server, target_port);
         Ok(PlayerConnectionManager {
             state: ConnectionState::Handshake,
             player_connection,
             player_handler,
-            server_connection,
-            server_handler,
+            connection_backend: Box::new(server_backend),
+            connection_backend_handle: None,
         })
     }
 
     pub(crate) async fn handle(mut self) {
         self.player_connection.dispatch();
-        self.server_connection.dispatch();
+        self.connection_backend_handle = Some(self.connection_backend.init().unwrap()); // TODO: better match
 
         while self.state != ConnectionState::Closed {
             tokio::select! { Some(packet) = self.player_handler.recv() => {
                     self.handle_client_packet(packet).await;
                 }
 
-            Some(packet) = self.server_handler.recv() => {
+            Some(packet) = self.connection_backend_handle.as_mut().unwrap().incoming.recv() => {
                 self.handle_server_packet(packet).await;
             }};
 
@@ -97,16 +93,19 @@ impl PlayerConnectionManager {
         log::info!("Connection Terminated.");
     }
 
-    async fn handle_client_packet(&self, packet: RawPacket) {
-        log::debug!("Sending to Server: {:?}", packet);
-        self.server_handler
+    async fn handle_client_packet(&mut self, packet: RawPacket) {
+        // log::debug!("Sending to Server: {:?}", packet);
+        self.connection_backend_handle
+            .as_ref()
+            .unwrap()
+            .outgoing
             .send(packet)
             .await
             .expect("Could not send to server handler pipe")
     }
 
     async fn handle_server_packet(&self, packet: RawPacket) {
-        log::debug!("Sending to Client: {:?}", packet);
+        // log::debug!("Sending to Client: {:?}", packet);
         self.player_handler
             .send(packet)
             .await

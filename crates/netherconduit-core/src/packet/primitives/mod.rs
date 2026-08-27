@@ -1,10 +1,7 @@
 // Custom Datatypes
 
-mod var_int;
-mod string;
 mod int;
+mod string;
+mod var_int;
 
 pub use var_int::VarInt;
-
-
-

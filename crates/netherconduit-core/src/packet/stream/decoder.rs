@@ -1,3 +1,5 @@
+use std::num::TryFromIntError;
+
 use bytes::{Buf, BytesMut};
 use tokio_util::codec::Decoder;
 
@@ -9,6 +11,12 @@ use crate::packet::stream::Decode;
 pub enum DecodeError {
     Incomplete,
     Invalid,
+}
+
+impl From<TryFromIntError> for DecodeError {
+    fn from(_value: TryFromIntError) -> Self {
+        DecodeError::Invalid
+    }
 }
 
 impl From<DecodeError> for std::io::Error {
