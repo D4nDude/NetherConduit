@@ -8,7 +8,7 @@ use log::error;
 impl Decode for String {
     fn decode(buffer: &[u8]) -> Result<(Self, usize), crate::packet::stream::decoder::DecodeError> {
         let (string_length, length_bytes) = VarInt::decode(buffer)?;
-        let packet_length = (usize::try_from(string_length)? + length_bytes);
+        let packet_length = usize::try_from(string_length)? + length_bytes;
         let output_string = match buffer.get(length_bytes..packet_length) {
             Some(value) => value,
             None => {

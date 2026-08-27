@@ -69,7 +69,6 @@ impl Decoder for MinecraftPacketDecoder {
         src.advance(int_size);
 
         let data = src.split_to(usize::try_from(packet_length).unwrap());
-        
 
         Ok(Some(RawPacket::new(data.freeze())))
     }

@@ -27,9 +27,7 @@ impl RawPacket {
         let mut dst = BytesMut::new();
         id.encode(&mut dst);
         dst.extend(payload);
-        RawPacket {
-            data: dst.freeze()
-        }
+        RawPacket { data: dst.freeze() }
     }
 
     pub fn len(&self) -> usize {

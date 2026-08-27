@@ -18,8 +18,7 @@ impl Encoder<RawPacket> for MinecraftPacketEncoder {
     type Error = std::io::Error;
 
     fn encode(&mut self, item: RawPacket, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        let packet_length =
-            VarInt::new(i32::try_from(item.data.len()).unwrap());
+        let packet_length = VarInt::new(i32::try_from(item.data.len()).unwrap());
         packet_length.encode(dst);
         dst.extend(item.data);
         Ok(())

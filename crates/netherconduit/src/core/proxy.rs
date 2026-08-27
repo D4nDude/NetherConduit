@@ -45,7 +45,7 @@ impl ProxyConfig {
             address: "0.0.0.0",
             port: 25565,
             default_server: server,
-            default_server_port: port
+            default_server_port: port,
         }
     }
 }
@@ -58,13 +58,18 @@ pub(crate) async fn start_proxy(config: ProxyConfig) {
 
     while let Ok((stream, socket)) = listener.accept().await {
         info!("New Client Connection from: {:#?}", socket);
-        let _joinhandle =
-            match PlayerConnectionManager::new(stream, &config.default_server, config.default_server_port).await {
-                Ok(connection_handler) => tokio::spawn(connection_handler.handle()),
-                Err(e) => {
-                    log::error!("Could not Establish connection: {:?}", e.error);
-                    continue;
-                }
-            };
+        let _joinhandle = match PlayerConnectionManager::new(
+            stream,
+            &config.default_server,
+            config.default_server_port,
+        )
+        .await
+        {
+            Ok(connection_handler) => tokio::spawn(connection_handler.handle()),
+            Err(e) => {
+                log::error!("Could not Establish connection: {:?}", e.error);
+                continue;
+            }
+        };
     }
 }
