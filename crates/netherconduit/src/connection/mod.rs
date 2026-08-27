@@ -90,8 +90,6 @@ impl Connection {
             self.connection_incoming_queue_sender.clone(),
         )));
     }
-
-    pub(crate) fn collect(&mut self) {}
 }
 
 async fn read_handler(

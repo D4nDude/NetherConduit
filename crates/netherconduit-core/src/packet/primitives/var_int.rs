@@ -49,11 +49,10 @@ impl Encode for VarInt {
 
 impl Decode for VarInt {
     fn decode(buffer: &[u8]) -> Result<(VarInt, usize), DecodeError> {
-        let mut cursor: usize = 0;
         let mut value: u32 = 0;
 
         let mut position: u32 = 0;
-        for _ in 0..5 {
+        for cursor in 0..5 {
             let current_byte: &u8 = match buffer.get(cursor) {
                 Some(value) => value,
                 None => return Err(DecodeError::Incomplete),
@@ -65,7 +64,6 @@ impl Decode for VarInt {
             }
 
             position += 7;
-            cursor += 1;
         }
         Err(DecodeError::Invalid)
     }
