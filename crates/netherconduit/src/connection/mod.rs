@@ -5,13 +5,15 @@ use netherconduit_core::packet::RawPacket;
 use netherconduit_core::packet::stream::{
     decoder::MinecraftPacketDecoder, encoder::MinecraftPacketEncoder,
 };
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
-use tokio::sync::mpsc::error::{SendError, TryRecvError, TrySendError};
+use tokio::sync::mpsc::error::SendError;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::task::JoinHandle;
 use tokio_stream::StreamExt;
 use tokio_util::codec::{FramedRead, FramedWrite};
+use tokio_util::sync::CancellationToken;
 
 pub(crate) mod player_connection;
 
@@ -19,32 +21,34 @@ pub(crate) mod player_connection;
 pub struct Connection {
     connection_outgoing_queue_receiver: Option<Receiver<RawPacket>>, // internal reciever for sending packets
     connection_incoming_queue_sender: Sender<RawPacket>, // queue to send recived packets onward
+
     tcp_stream: Option<TcpStream>,
-    write_task: Option<JoinHandle<OwnedWriteHalf>>,
-    read_task: Option<JoinHandle<OwnedReadHalf>>,
+    write_task: Option<JoinHandle<()>>,
+    read_task: Option<JoinHandle<()>>,
+
+    shutdown_token: CancellationToken,
 }
 
 #[derive(Debug)]
 pub struct ConnectionHandle {
     pub incoming: Receiver<RawPacket>,
     pub outgoing: Sender<RawPacket>,
+    pub shutdown_token: CancellationToken,
 }
 
 impl ConnectionHandle {
     pub async fn send(&self, packet: RawPacket) -> Result<(), SendError<RawPacket>> {
-        self.outgoing.send(packet).await
-    }
+        tokio::select! {
+            result = self.outgoing.send(packet.clone()) => result,
 
-    pub fn try_send(&self, packet: RawPacket) -> Result<(), TrySendError<RawPacket>> {
-        self.outgoing.try_send(packet)
+            _ = self.shutdown_token.cancelled() => {
+                Err(SendError(packet))
+            }
+        }
     }
 
     pub async fn recv(&mut self) -> Option<RawPacket> {
         self.incoming.recv().await
-    }
-
-    pub fn try_recv(&mut self) -> Result<RawPacket, TryRecvError> {
-        self.incoming.try_recv()
     }
 }
 
@@ -55,6 +59,7 @@ impl Connection {
             mpsc::channel(64);
         let (connection_outgoing_queue_sender, connection_outgoing_queue_receiver) =
             mpsc::channel(64);
+        let shutdown_token = CancellationToken::new();
         (
             Connection {
                 connection_outgoing_queue_receiver: Some(connection_outgoing_queue_receiver),
@@ -62,10 +67,12 @@ impl Connection {
                 tcp_stream: Some(tcp_stream),
                 write_task: None,
                 read_task: None,
+                shutdown_token: shutdown_token.clone(),
             },
             ConnectionHandle {
                 incoming: connection_incomming_queue_receiver,
                 outgoing: connection_outgoing_queue_sender,
+                shutdown_token,
             },
         )
     }
@@ -83,19 +90,38 @@ impl Connection {
             self.connection_outgoing_queue_receiver
                 .take()
                 .expect("Reciever already given to a task"),
+            self.shutdown_token.clone(),
         )));
 
         self.read_task = Some(tokio::spawn(read_handler(
             read_side,
             self.connection_incoming_queue_sender.clone(),
+            self.shutdown_token.clone(),
         )));
+    }
+
+    pub async fn shutdown(&mut self) {
+        self.shutdown_token.cancel();
+
+        if let Some(task) = self.write_task.take()
+            && let Err(error) = task.await
+        {
+            log::warn!("write_task join error: {error}")
+        }
+
+        if let Some(task) = self.read_task.take()
+            && let Err(error) = task.await
+        {
+            log::warn!("read_task join error: {error}")
+        }
     }
 }
 
 async fn read_handler(
     read_side: OwnedReadHalf,
     connection_incoming_queue_sender: Sender<RawPacket>,
-) -> OwnedReadHalf {
+    shutdown_token: CancellationToken,
+) {
     // Craete the packet framer
     let decoder = MinecraftPacketDecoder::new();
     let mut reader = FramedRead::new(read_side, decoder);
@@ -103,7 +129,14 @@ async fn read_handler(
     // iterate until state is closed
     while !connection_incoming_queue_sender.is_closed() {
         // pull next packet from framer
-        let potential_next_packet = reader.next().await;
+        let potential_next_packet = tokio::select! {
+            _ = shutdown_token.cancelled() => {
+                log::debug!("Read handler shutting down");
+                break;
+            }
+
+            packet = reader.next() => packet,
+        };
 
         // unwrap to see if a packet was consumed
         let next_packet_result = match potential_next_packet {
@@ -121,36 +154,69 @@ async fn read_handler(
         };
 
         // send to incoming queue
-        connection_incoming_queue_sender
+        if connection_incoming_queue_sender
             .send(next_packet)
             .await
-            .expect("Queue should not be closed");
+            .is_err()
+        {
+            break;
+        }
     }
-
-    reader.into_inner()
 }
 
 async fn write_handler(
     write_side: OwnedWriteHalf,
     mut connection_outgoing_queue_receiver: Receiver<RawPacket>,
-) -> OwnedWriteHalf {
+    shutdown_token: CancellationToken,
+) {
     // Create output stream decoder
     let encoder = MinecraftPacketEncoder::new();
     let mut writer = FramedWrite::new(write_side, encoder);
 
-    while !connection_outgoing_queue_receiver.is_closed() {
-        let next_packet = match connection_outgoing_queue_receiver.recv().await {
-            Some(packet) => packet,
-            None => {
-                log::debug!("Conneciton output stream closed");
+    loop {
+        tokio::select! {
+            biased;
+
+            _ = shutdown_token.cancelled() => {
+                log::debug!("Write handler shutting down");
+
+                // Flush the queue
+                while let Ok(packet) = connection_outgoing_queue_receiver.try_recv() {
+                    log::trace!("Write task writing packet: {packet}");
+                    if let Err(error) = writer.send(packet).await {
+                        log::error!("Failed to send packet during shutdown: {error}");
+                        return;
+                    }
+                }
+
                 break;
             }
-        };
-        writer
-            .send(next_packet)
-            .await
-            .expect("Queue should not be closed");
+
+            next_packet = connection_outgoing_queue_receiver.recv() => {
+                match next_packet {
+                    Some(packet) => {
+                        log::trace!("Write task writing packet: {packet}");
+                        if let Err(error) = writer.send(packet).await {
+                            log::error!("Failed to send packet: {error}");
+                            break;
+                        }
+                    }
+                    None => {
+                        log::debug!("Connection output stream closed");
+                        break;
+                    }
+                }
+            }
+        }
     }
 
-    writer.into_inner()
+    log::debug!("Flushing Write Queue");
+    if let Err(error) = writer.flush().await {
+        log::error!("Failed to flush connection: {error}");
+    }
+
+    log::debug!("Shutting down TCP connection");
+    if let Err(error) = writer.into_inner().shutdown().await {
+        log::error!("Failed to shutdown TCP Connection: {error}")
+    }
 }
