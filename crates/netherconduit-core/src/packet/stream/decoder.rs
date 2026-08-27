@@ -68,21 +68,18 @@ impl Decoder for MinecraftPacketDecoder {
 
         src.advance(int_size);
 
-        let mut data = src.split_to(usize::try_from(packet_length).unwrap());
+        let data = src.split_to(usize::try_from(packet_length).unwrap());
+        
 
-        // We should be guaranteed to get a valid VarInt from here
-        let (packet_id, _) = VarInt::decode_consuming_buffer(&mut data).unwrap();
-
-        Ok(Some(RawPacket::new(packet_id, data)))
+        Ok(Some(RawPacket::new(data.freeze())))
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::MinecraftPacketDecoder;
-    use crate::packet::RawPacket;
     use crate::packet::primitives::VarInt;
-    use bytes::{BufMut, BytesMut};
+    use bytes::{BufMut, Bytes, BytesMut};
     use std::assert_matches;
     use tokio_util::codec::Decoder;
 
@@ -99,9 +96,10 @@ mod test {
         let mut decoder = MinecraftPacketDecoder::new();
         let mut test_data: BytesMut = BytesMut::from(&[0x10; 17][..]);
         let output_packet = decoder.decode(&mut test_data).unwrap().unwrap();
+        assert_eq!(output_packet.id().unwrap(), VarInt::new(16));
         assert_eq!(
-            output_packet,
-            RawPacket::new(VarInt::new(16), BytesMut::from(&[0x10; 15][..]))
+            output_packet.payload().unwrap(),
+            Bytes::from(&[0x10; 15][..])
         );
     }
 
@@ -119,16 +117,18 @@ mod test {
 
         let mut test_data: BytesMut = BytesMut::from(&[0x10; 17][..]);
         let output_packet = decoder.decode(&mut test_data).unwrap().unwrap();
+        assert_eq!(output_packet.id().unwrap(), VarInt::new(16));
         assert_eq!(
-            output_packet,
-            RawPacket::new(VarInt::new(16), BytesMut::from(&[0x10; 15][..]))
+            output_packet.payload().unwrap(),
+            Bytes::from(&[0x10; 15][..])
         );
 
         test_data.put_bytes(0x11, 18);
         let output_packet = decoder.decode(&mut test_data).unwrap().unwrap();
+        assert_eq!(output_packet.id().unwrap(), VarInt::new(17));
         assert_eq!(
-            output_packet,
-            RawPacket::new(VarInt::new(17), BytesMut::from(&[0x11; 16][..]))
+            output_packet.payload().unwrap(),
+            Bytes::from(&[0x11; 16][..])
         );
     }
 
@@ -140,14 +140,16 @@ mod test {
         test_data.put_bytes(0x11, 18);
 
         let output_packet = decoder.decode(&mut test_data).unwrap().unwrap();
+        assert_eq!(output_packet.id().unwrap(), VarInt::new(16));
         assert_eq!(
-            output_packet,
-            RawPacket::new(VarInt::new(16), BytesMut::from(&[0x10; 15][..]))
+            output_packet.payload().unwrap(),
+            Bytes::from(&[0x10; 15][..])
         );
         let output_packet = decoder.decode(&mut test_data).unwrap().unwrap();
+        assert_eq!(output_packet.id().unwrap(), VarInt::new(17));
         assert_eq!(
-            output_packet,
-            RawPacket::new(VarInt::new(17), BytesMut::from(&[0x11; 16][..]))
+            output_packet.payload().unwrap(),
+            Bytes::from(&[0x11; 16][..])
         );
     }
 

@@ -1,38 +1,64 @@
 use std::fmt::Display;
 
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 
-use crate::packet::{primitives::VarInt, stream::Encode};
+use crate::packet::{
+    primitives::VarInt,
+    stream::{Decode, Encode, decoder::DecodeError},
+};
 
+pub mod factory;
 pub mod primitives;
 pub mod stream;
+pub mod types;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RawPacket {
-    pub id: VarInt,
-    pub payload: BytesMut,
+    pub data: Bytes,
 }
 
 impl RawPacket {
-    pub fn new(id: impl Into<VarInt>, payload: BytesMut) -> RawPacket {
+    pub fn new(data: Bytes) -> RawPacket {
+        RawPacket { data }
+    }
+
+    pub fn construct(id: impl Into<VarInt>, payload: Bytes) -> RawPacket {
+        let id = id.into();
+        let mut dst = BytesMut::new();
+        id.encode(&mut dst);
+        dst.extend(payload);
         RawPacket {
-            id: id.into(),
-            payload,
+            data: dst.freeze()
         }
     }
 
     pub fn len(&self) -> usize {
-        self.id.get_encoded_length() + self.payload.len()
+        self.data.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.payload.is_empty()
+        self.data.len() == self.id().unwrap().get_encoded_length()
+    }
+
+    pub fn id(&self) -> Result<VarInt, DecodeError> {
+        let (vint, _) = VarInt::decode(&self.data)?;
+        Ok(vint)
+    }
+
+    pub fn payload(&self) -> Result<Bytes, DecodeError> {
+        let (_, id_len) = VarInt::decode(&self.data)?;
+        Ok(self.data.slice(id_len..))
     }
 }
 
 impl Display for RawPacket {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "(id:{},0x{:x})", self.id, self.payload)
+        write!(
+            f,
+            "(id:{},0x{:x})",
+            self.id().unwrap(),
+            self.payload().unwrap()
+        )
     }
 }
 

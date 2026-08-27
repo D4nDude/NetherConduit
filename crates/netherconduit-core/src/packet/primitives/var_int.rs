@@ -53,7 +53,7 @@ impl Decode for VarInt {
         let mut value: u32 = 0;
 
         let mut position: u32 = 0;
-        while position < 32 {
+        for _ in 0..5 {
             let current_byte: &u8 = match buffer.get(cursor) {
                 Some(value) => value,
                 None => return Err(DecodeError::Incomplete),
