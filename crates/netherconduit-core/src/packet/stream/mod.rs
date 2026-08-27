@@ -1,9 +1,10 @@
 use bytes::{Buf, BytesMut};
 
-use decoder::DecodeError;
+pub use error::DecodeError;
 
 pub mod decoder;
 pub mod encoder;
+mod error;
 
 pub trait Encode {
     // Encodes Self into the Buffer

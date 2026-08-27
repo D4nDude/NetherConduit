@@ -2,7 +2,7 @@ use std::{fmt::Display, num::TryFromIntError};
 
 use bytes::{BufMut, BytesMut};
 
-use crate::packet::stream::{Decode, Encode, decoder::DecodeError};
+use crate::packet::stream::{Decode, Encode, DecodeError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct VarInt(i32);
@@ -206,7 +206,7 @@ mod test {
         use std::assert_matches;
 
         use super::super::VarInt;
-        use crate::packet::stream::{Decode, decoder::DecodeError};
+        use crate::packet::stream::{Decode, DecodeError};
 
         #[test]
         fn zero() {

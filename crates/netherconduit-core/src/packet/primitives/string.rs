@@ -1,12 +1,11 @@
 use crate::packet::{
-    primitives::VarInt,
-    stream::{Decode, decoder::DecodeError},
+    primitives::VarInt, stream::{Decode, Encode, DecodeError},
 };
 
 use log::error;
 
 impl Decode for String {
-    fn decode(buffer: &[u8]) -> Result<(Self, usize), crate::packet::stream::decoder::DecodeError> {
+    fn decode(buffer: &[u8]) -> Result<(Self, usize), DecodeError> {
         let (string_length, length_bytes) = VarInt::decode(buffer)?;
         let packet_length = usize::try_from(string_length)? + length_bytes;
         let output_string = match buffer.get(length_bytes..packet_length) {
@@ -26,5 +25,15 @@ impl Decode for String {
             },
             packet_length,
         ))
+    }
+}
+
+impl Encode for String {
+    fn encode(&self, buffer: &mut bytes::BytesMut) -> usize {
+        todo!()
+    }
+
+    fn get_encoded_length(&self) -> usize {
+        todo!()
     }
 }

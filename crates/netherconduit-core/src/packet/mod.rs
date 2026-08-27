@@ -4,9 +4,10 @@ use bytes::{Bytes, BytesMut};
 
 use crate::packet::{
     primitives::VarInt,
-    stream::{Decode, Encode, decoder::DecodeError},
+    stream::{Decode, Encode, DecodeError},
 };
 
+pub mod decoder;
 pub mod factory;
 pub mod primitives;
 pub mod stream;
@@ -58,14 +59,4 @@ impl Display for RawPacket {
             self.payload().unwrap()
         )
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ConnectionState {
-    Handshake,
-    Status,
-    Login,
-    Configuration,
-    Play,
-    Closed,
 }
