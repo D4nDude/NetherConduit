@@ -1,6 +1,11 @@
-use std::io::Error;
-
-use netherconduit_core::packet::{ConnectionState, RawPacket};
+use netherconduit_core::{
+    connection::ConnectionState,
+    packet::{
+        RawPacket,
+        builder::RawPacketBuilder,
+        types::{HandshakePacket, MinecraftPacket, PingRequestPacket, handshake::HandshakeIntent},
+    },
+};
 use tokio::net::TcpStream;
 
 use crate::{
@@ -8,10 +13,12 @@ use crate::{
     connection::{Connection, ConnectionHandle},
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum PacketAction {
-    #[default]
-    Forward,
+    Forward(RawPacket),
+    Return(RawPacket),
+    ReturnAnd(RawPacket, Box<PacketAction>),
     UpdateState(ConnectionState),
     Disconnect,
 }
@@ -20,80 +27,76 @@ pub(crate) struct PlayerConnectionManager {
     state: ConnectionState,
     player_connection: Connection,
     player_handler: ConnectionHandle,
-    connection_backend: Box<dyn ProxyBackend>,
+    _connection_backend: Box<dyn ProxyBackend>,
     connection_backend_handle: Option<ProxyBackendHandle>,
 }
 
-#[derive(Debug)]
-pub(crate) struct PlayerConnectionError {
-    pub(crate) error: Error,
-}
+// #[derive(Debug)]
+// pub(crate) struct PlayerConnectionError {
+//     pub(crate) error: Error,
+// }
 
-impl PlayerConnectionError {
-    pub fn new(error: Error) -> Self {
-        PlayerConnectionError { error }
-    }
-}
+// impl PlayerConnectionError {
+//     pub fn new(error: Error) -> Self {
+//         PlayerConnectionError { error }
+//     }
+// }
 
 impl PlayerConnectionManager {
     pub(crate) async fn new(
         player_stream: TcpStream,
         target_server: &str,
         target_port: u16,
-    ) -> Result<PlayerConnectionManager, PlayerConnectionError> {
+    ) -> PlayerConnectionManager {
         let (player_connection, player_handler) = Connection::new(player_stream);
         let server_backend = ProxyServerBackend::new(target_server, target_port);
-        Ok(PlayerConnectionManager {
+        PlayerConnectionManager {
             state: ConnectionState::Handshake,
             player_connection,
             player_handler,
-            connection_backend: Box::new(server_backend),
+            _connection_backend: Box::new(server_backend),
             connection_backend_handle: None,
-        })
+        }
     }
 
     pub(crate) async fn handle(mut self) {
         self.player_connection.dispatch();
-        self.connection_backend_handle = Some(self.connection_backend.init().unwrap()); // TODO: better match
+        // self.connection_backend_handle = Some(self.connection_backend.init().unwrap()); // TODO: better match
 
         while self.state != ConnectionState::Closed {
-            tokio::select! { Some(packet) = self.player_handler.recv() => {
-                    self.handle_client_packet(packet).await;
+            log::trace!("In State: {:#?}", self.state);
+            self.state = match self.state {
+                ConnectionState::Handshake => {
+                    log::info!("Handshaking");
+                    let action: PacketAction = match self.player_handler.recv().await {
+                        Some(packet) => handle_handshake(&packet),
+                        None => {
+                            log::error!("Invalid/no packet recieved. Disconnecting");
+                            PacketAction::Disconnect
+                        }
+                    };
+                    self.handle_action(action).await.unwrap_or(self.state)
                 }
-
-            Some(packet) = self.connection_backend_handle.as_mut().unwrap().incoming.recv() => {
-                self.handle_server_packet(packet).await;
-            }};
-
-            // process packet based on state
-            // let action = match self.state {
-            //     ConnectionState::Handshake => Self::handle_handshake(&next_packet),
-            //     _ => {
-            //         error!("Connection State not implemented: {:?}", self.state);
-            //         PacketAction::Disconnect
-            //     }
-            // };
-
-            // // pass the packet on or affect connection state
-            // match action {
-            //     PacketAction::Forward => {
-            //         connection_forward_queue.send(next_packet);
-            //     }
-            //     PacketAction::UpdateState(new_state) => {
-            //         self.state = new_state;
-            //     }
-            //     PacketAction::Disconnect => {
-            //         error!("I dont know how to disconnect...");
-            //         panic!("Force Disconnect");
-            //     }
-            // }
+                ConnectionState::Status => {
+                    log::info!("Status check!");
+                    let action: PacketAction = match self.player_handler.recv().await {
+                        Some(packet) => handle_status(&packet),
+                        None => {
+                            log::error!("Invalid/no packet recieved. Disconnecting");
+                            PacketAction::Disconnect
+                        }
+                    };
+                    self.handle_action(action).await.unwrap_or(self.state)
+                }
+                state => todo!("Status not yet implemented: {state}"),
+            };
         }
 
-        //tokio::join!(player_handler.handle(), server_handler.handle());
+        self.player_connection.shutdown().await;
         log::info!("Connection Terminated.");
     }
 
-    async fn handle_client_packet(&mut self, packet: RawPacket) {
+    async fn send_packet_to_server(&mut self, packet: RawPacket) {
         // log::debug!("Sending to Server: {:?}", packet);
         self.connection_backend_handle
             .as_ref()
@@ -104,26 +107,91 @@ impl PlayerConnectionManager {
             .expect("Could not send to server handler pipe")
     }
 
-    async fn handle_server_packet(&self, packet: RawPacket) {
+    async fn send_packet_to_client(&self, packet: RawPacket) {
         // log::debug!("Sending to Client: {:?}", packet);
         self.player_handler
             .send(packet)
             .await
             .expect("Could not send to player handler pipe")
     }
+
+    async fn handle_action(&mut self, action: PacketAction) -> Option<ConnectionState> {
+        match action {
+            PacketAction::Forward(packet) => {
+                self.send_packet_to_server(packet).await;
+                None
+            }
+            PacketAction::Return(packet) => {
+                log::trace!("Returning Packet: {:#?}", packet);
+                self.send_packet_to_client(packet).await;
+                None
+            }
+            PacketAction::ReturnAnd(packet, next_action) => {
+                log::trace!(
+                    "Returning And doing Packet: {:#?}; next_action: {:#?}",
+                    packet,
+                    next_action
+                );
+                self.send_packet_to_client(packet).await;
+                Box::pin(self.handle_action(*next_action)).await
+            }
+            PacketAction::UpdateState(new_state) => {
+                log::debug!("Switching state to {new_state}");
+                Some(new_state)
+            }
+            PacketAction::Disconnect => Some(ConnectionState::Closed),
+        }
+    }
 }
 
-// fn handle_handshake(packet: &RawPacket) -> PacketAction {
-//     let packet = match HandshakePacket::from_raw(&packet) {
-//         Ok(value) => value,
-//         Err(e) => {
-//             error!("Decode Error: {:?}", e);
-//             return PacketAction::Disconnect;
-//         }
-//     };
-//     match packet.intent {
-//         HandshakeIntent::Status => PacketAction::UpdateState(ConnectionState::Status),
-//         HandshakeIntent::Login => PacketAction::UpdateState(ConnectionState::Login),
-//         HandshakeIntent::Transfer => PacketAction::UpdateState(ConnectionState::Login),
-//     }
-// }
+fn handle_handshake(packet: &RawPacket) -> PacketAction {
+    let packet = match HandshakePacket::from_raw(packet) {
+        Ok(value) => value,
+        Err(e) => {
+            log::error!("Decode Error: {:?}", e);
+            return PacketAction::Disconnect;
+        }
+    };
+    log::trace!("Incoming Handshake: {packet}");
+    match packet.intent {
+        HandshakeIntent::Status => PacketAction::UpdateState(ConnectionState::Status),
+        HandshakeIntent::Login => PacketAction::UpdateState(ConnectionState::Login),
+        HandshakeIntent::Transfer => PacketAction::UpdateState(ConnectionState::Login),
+    }
+}
+
+fn handle_status(packet: &RawPacket) -> PacketAction {
+    log::trace!("Incoming Status: {packet}");
+    match packet.id().unwrap().value() {
+        0 => {
+            log::debug!("Status Check");
+            let return_packet = RawPacketBuilder::new(0)
+                .string_slice(
+                    "{\"version\": {\"name\": \"26.2\",\"protocol\": 776},\"players\": {\"max\": 20,\"online\": 0},\"description\": {\"text\": \"Hello, world!\"}}",
+                )
+                .unwrap()
+                .build();
+            PacketAction::Return(return_packet)
+            // PacketAction::ReturnAnd(return_packet, Box::new(PacketAction::Disconnect))
+        }
+        1 => {
+            let ping_request_packet = match PingRequestPacket::from_raw(packet) {
+                Ok(value) => value,
+                Err(e) => {
+                    log::error!("Decode Error: {:?}", e);
+                    return PacketAction::Disconnect;
+                }
+            };
+            log::debug!("Ping Request: {:#?}", ping_request_packet);
+            let return_packet = RawPacketBuilder::new(1)
+                .long(ping_request_packet.payload)
+                .unwrap()
+                .build();
+            PacketAction::ReturnAnd(return_packet, Box::new(PacketAction::Disconnect))
+        }
+        value => {
+            log::warn!("Invalid status packet ID: {value}");
+            PacketAction::Disconnect
+        }
+    }
+}

@@ -6,12 +6,13 @@ use crate::{
     connection::Connection,
 };
 
+#[allow(unused)]
 pub struct ProxyServerBackend {
     address: String,
     port: u16,
     connection: Option<Connection>,
     active_trigger: watch::Sender<bool>,
-    active_sink: watch::Receiver<bool>,
+    _active_sink: watch::Receiver<bool>,
 }
 
 impl ProxyServerBackend {
@@ -22,13 +23,9 @@ impl ProxyServerBackend {
             port,
             connection: None,
             active_trigger,
-            active_sink,
+            _active_sink: active_sink,
         }
     }
-}
-
-impl ProxyServerBackend {
-    async fn handle_reading(self) {}
 }
 
 impl ProxyBackend for ProxyServerBackend {
