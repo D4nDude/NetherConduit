@@ -5,12 +5,14 @@ use netherconduit_core::{
         builder::RawPacketBuilder,
         types::{HandshakePacket, MinecraftPacket, PingRequestPacket, handshake::HandshakeIntent},
     },
+    server::{protocol_version::ConnectionProtocolVersion, status::ServerStatus},
 };
-use tokio::net::TcpStream;
+use tokio::{net::TcpStream, sync::watch::Receiver};
 
 use crate::{
     backend::{ProxyBackend, ProxyServerBackend},
     connection::Connection,
+    core::proxy::ProxyConfig,
 };
 
 #[allow(dead_code)]
@@ -27,7 +29,9 @@ pub(crate) enum PacketAction {
 pub(crate) struct PlayerConnectionManager {
     state: ConnectionState,
     player_connection: Connection,
+    protocol_version: ConnectionProtocolVersion,
     connection_backend: Box<dyn ProxyBackend>,
+    proxy_configuration_reciever: Receiver<ProxyConfig>,
 }
 
 // #[derive(Debug)]
@@ -44,15 +48,35 @@ pub(crate) struct PlayerConnectionManager {
 impl PlayerConnectionManager {
     pub(crate) async fn new(
         player_stream: TcpStream,
-        target_server: &str,
-        target_port: u16,
+        proxy_configuration_reciever: Receiver<ProxyConfig>,
     ) -> PlayerConnectionManager {
-        let player_connection = Connection::new(player_stream);
-        let server_backend = ProxyServerBackend::new(target_server, target_port);
+        let mut player_connection = Connection::new(player_stream);
+
+        // TODO: Malicious parties can hang and not send a handshake, need timeout
+        log::info!("Handshaking");
+        let (initial_state, protocol_version) = match player_connection.read().await {
+            Some(packet) => handle_handshake(&packet),
+            None => {
+                log::error!("Invalid/no packet recieved. Disconnecting");
+                (
+                    ConnectionState::LoginDisconnect,
+                    ConnectionProtocolVersion::default(),
+                )
+            }
+        };
+
+        // TODO: Temprary setup of default backend. Will be moved to after login
+        let server_backend = ProxyServerBackend::new(
+            &proxy_configuration_reciever.borrow().default_server,
+            proxy_configuration_reciever.borrow().default_server_port,
+        );
+
         PlayerConnectionManager {
-            state: ConnectionState::Handshake,
+            state: initial_state,
             player_connection,
+            protocol_version,
             connection_backend: Box::new(server_backend),
+            proxy_configuration_reciever,
         }
     }
 
@@ -67,23 +91,20 @@ impl PlayerConnectionManager {
                 self.state = ConnectionState::Closed;
             }
             self.state = match self.state {
-                ConnectionState::Handshake => {
-                    log::info!("Handshaking");
-                    let (action, original_packet) = match self.player_connection.read().await {
-                        Some(packet) => (handle_handshake(&packet), Some(packet)),
-                        None => {
-                            log::error!("Invalid/no packet recieved. Disconnecting");
-                            (PacketAction::Disconnect, None)
-                        }
-                    };
-                    self.handle_action(action, original_packet)
-                        .await
-                        .unwrap_or(self.state)
-                }
                 ConnectionState::Status => {
                     log::info!("Status check!");
                     let (action, original_packet) = match self.player_connection.read().await {
-                        Some(packet) => (handle_status(&packet), Some(packet)),
+                        Some(packet) => {
+                            let server_status = ServerStatus::new(
+                                self.protocol_version,
+                                None,
+                                self.proxy_configuration_reciever
+                                    .borrow()
+                                    .description
+                                    .as_str(),
+                            );
+                            (handle_status(server_status, &packet), Some(packet))
+                        }
                         None => {
                             log::error!("Invalid/no packet recieved. Disconnecting");
                             (PacketAction::Disconnect, None)
@@ -184,32 +205,38 @@ impl PlayerConnectionManager {
     }
 }
 
-fn handle_handshake(raw_packet: &RawPacket) -> PacketAction {
+fn handle_handshake(raw_packet: &RawPacket) -> (ConnectionState, ConnectionProtocolVersion) {
     let packet = match HandshakePacket::from_raw(raw_packet) {
         Ok(value) => value,
         Err(e) => {
             log::error!("Decode Error: {:?}", e);
-            return PacketAction::Disconnect;
+            return (
+                ConnectionState::LoginDisconnect,
+                ConnectionProtocolVersion::default(),
+            );
         }
     };
     log::trace!("Incoming Handshake: {packet}");
-    match packet.intent {
-        HandshakeIntent::Status => PacketAction::UpdateState(ConnectionState::Status),
-        HandshakeIntent::Login => {
-            PacketAction::ForwardAnd(Box::new(PacketAction::UpdateState(ConnectionState::Play)))
-        }
-        HandshakeIntent::Transfer => PacketAction::UpdateState(ConnectionState::Login),
-    }
+    (
+        match packet.intent {
+            HandshakeIntent::Status => ConnectionState::Status,
+            HandshakeIntent::Login => ConnectionState::Login,
+            HandshakeIntent::Transfer => ConnectionState::Login,
+        },
+        packet.protocol_version,
+    )
 }
 
-fn handle_status(packet: &RawPacket) -> PacketAction {
+fn handle_status(server_status: ServerStatus, packet: &RawPacket) -> PacketAction {
     log::trace!("Incoming Status: {packet}");
     match packet.id().unwrap().value() {
         0 => {
             log::debug!("Status Check");
             let return_packet = RawPacketBuilder::new(0)
-                .string_slice(
-                    "{\"version\": {\"name\": \"26.2\",\"protocol\": 776},\"players\": {\"max\": 20,\"online\": 0},\"description\": {\"text\": \"Hello, world!\"}}",
+                .string(
+                    server_status
+                        .to_json()
+                        .expect("Should be valid status encoding"),
                 )
                 .unwrap()
                 .build();

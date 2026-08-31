@@ -6,7 +6,10 @@ use std::{
     },
     net::SocketAddr,
 };
-use tokio::net::TcpListener;
+use tokio::{
+    net::TcpListener,
+    sync::watch::{self, Receiver, Ref, Sender},
+};
 
 use crate::connection::player_connection::PlayerConnectionManager;
 
@@ -14,8 +17,10 @@ use crate::connection::player_connection::PlayerConnectionManager;
 pub(crate) struct ProxyConfig {
     address: &'static str,
     port: u16,
-    default_server: String,
-    default_server_port: u16,
+    pub default_server: String,
+    pub default_server_port: u16,
+    _max_players: u32,
+    pub description: String,
 }
 
 impl ProxyConfig {
@@ -46,24 +51,50 @@ impl ProxyConfig {
             port: 25565,
             default_server: server,
             default_server_port: port,
+            _max_players: 20,
+            description: "{\"text\": \"Netherconduit Proxy\"}".to_string(),
         }
+    }
+}
+
+struct Proxy {
+    _configuration_pusher: Sender<ProxyConfig>,
+    configuration_watcher: Receiver<ProxyConfig>,
+}
+
+impl Proxy {
+    fn new(initial_config: ProxyConfig) -> Self {
+        let (sender, reciever) = watch::channel(initial_config);
+        Proxy {
+            _configuration_pusher: sender,
+            configuration_watcher: reciever,
+        }
+    }
+
+    fn borrow_config<'a>(&'a self) -> Ref<'a, ProxyConfig> {
+        self.configuration_watcher.borrow()
+    }
+
+    fn configuration_receiver(&self) -> Receiver<ProxyConfig> {
+        self.configuration_watcher.clone()
     }
 }
 
 pub(crate) async fn start_proxy(config: ProxyConfig) {
     info!("Starting Proxy with Config:\n{:?}", config);
 
-    let addr = SocketAddr::new(config.address.parse().unwrap(), config.port);
+    let proxy = Proxy::new(config);
+
+    let addr = SocketAddr::new(
+        proxy.borrow_config().address.parse().unwrap(),
+        proxy.borrow_config().port,
+    );
     let listener = TcpListener::bind(addr).await.unwrap();
 
     while let Ok((stream, socket)) = listener.accept().await {
         info!("New Client Connection from: {:#?}", socket);
-        let connection_handler = PlayerConnectionManager::new(
-            stream,
-            &config.default_server,
-            config.default_server_port,
-        )
-        .await;
+        let connection_handler =
+            PlayerConnectionManager::new(stream, proxy.configuration_receiver()).await;
         let _joinhandle = tokio::spawn(connection_handler.handle());
     }
 }

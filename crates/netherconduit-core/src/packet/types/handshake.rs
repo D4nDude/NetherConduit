@@ -2,7 +2,8 @@ use std::fmt::Display;
 
 use super::{MinecraftPacket, MinecraftPacketType};
 use crate::packet::stream::DecodeError;
-use crate::packet::{RawPacket, VarInt, decoder::RawPacketDecoder};
+use crate::packet::{RawPacket, decoder::RawPacketDecoder};
+use crate::server::protocol_version::ConnectionProtocolVersion;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum HandshakeIntent {
@@ -13,7 +14,7 @@ pub enum HandshakeIntent {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HandshakePacket {
-    pub protocol_version: VarInt,
+    pub protocol_version: ConnectionProtocolVersion,
     pub server_address: String,
     pub server_port: u16,
     pub intent: HandshakeIntent,
@@ -37,7 +38,7 @@ impl MinecraftPacket for HandshakePacket {
             }
         };
         Ok(Self {
-            protocol_version,
+            protocol_version: ConnectionProtocolVersion::from_var_int(protocol_version)?,
             server_address,
             server_port,
             intent,

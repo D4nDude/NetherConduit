@@ -1,4 +1,5 @@
 use bytes::BytesMut;
+use serde::Serialize;
 
 use crate::packet::{
     RawPacket,
@@ -84,6 +85,11 @@ impl RawPacketBuilder {
 
     pub fn string(mut self, string: String) -> Result<Self, EncodeError> {
         string.encode(&mut self.data)?;
+        Ok(self)
+    }
+
+    pub fn json<T: Serialize + ?Sized>(mut self, jsonable: &T) -> Result<Self, EncodeError> {
+        serde_json::to_string(jsonable)?.encode(&mut self.data)?;
         Ok(self)
     }
 

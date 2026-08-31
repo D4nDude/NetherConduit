@@ -1,4 +1,4 @@
-use std::num::TryFromIntError;
+use std::{error::Error, fmt::Display, num::TryFromIntError};
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum DecodeError {
@@ -27,13 +27,32 @@ impl From<DecodeError> for std::io::Error {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+impl Display for DecodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            DecodeError::Incomplete => write!(f, "Decode Error: Incomplete input"),
+            DecodeError::Invalid(value) => {
+                write!(f, "Decode Error: Invalid value for data type: {}", value)
+            }
+        }
+    }
+}
+
+impl Error for DecodeError {}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum EncodeError {
-    Invalid,
+    Invalid(String),
 }
 
 impl From<TryFromIntError> for EncodeError {
-    fn from(_value: TryFromIntError) -> Self {
-        EncodeError::Invalid
+    fn from(value: TryFromIntError) -> Self {
+        EncodeError::Invalid(format!("TryFromIntError: {value}"))
+    }
+}
+
+impl From<serde_json::Error> for EncodeError {
+    fn from(value: serde_json::Error) -> Self {
+        EncodeError::Invalid(format!("JSON Serialisation Error: {value}"))
     }
 }

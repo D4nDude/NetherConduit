@@ -13,3 +13,4 @@ simple_logger = "5.2.0"
 tokio = { version = "1.53.1", features = ["full"] }
 tokio-stream = "0.1.19"
 tokio-util = { version = "0.7.19", features = ["codec"] }
+uuid = { version = "1.26.0", features = ["v8"] }

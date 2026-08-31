@@ -39,7 +39,7 @@ impl RawPacketEncodable for &str {
             buffer.extend_from_slice(self.as_bytes());
             Ok(self.len() + string_length.get_encoded_length())
         } else {
-            Err(EncodeError::Invalid)
+            Err(EncodeError::Invalid(format!("String is too long: {self}")))
         }
     }
 
