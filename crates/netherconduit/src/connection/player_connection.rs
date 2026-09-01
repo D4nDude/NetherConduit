@@ -130,6 +130,10 @@ impl PlayerConnectionManager {
                         }
                     }
                 }
+                ConnectionState::Login => {
+                    self.connection_backend.init().await.unwrap();
+                    ConnectionState::Play
+                }
                 state => todo!("Status not yet implemented: {state}"),
             };
         }

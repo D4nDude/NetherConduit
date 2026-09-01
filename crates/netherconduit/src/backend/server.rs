@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use netherconduit_core::packet::RawPacket;
+use netherconduit_core::packet::{RawPacket, builder::RawPacketBuilder};
 use std::net::TcpStream;
 
 use crate::{
@@ -26,7 +26,7 @@ impl ProxyServerBackend {
 
 #[async_trait]
 impl ProxyBackend for ProxyServerBackend {
-    fn init(&mut self) -> Result<(), ProxyBackendError> {
+    async fn init(&mut self) -> Result<(), ProxyBackendError> {
         log::info!("Connecting to server...");
         let tcp_stream = match TcpStream::connect(format!("{}:{}", self.address, self.port)) {
             Ok(conn) => conn,
@@ -42,15 +42,17 @@ impl ProxyBackend for ProxyServerBackend {
             }
         };
         tcp_stream.set_nonblocking(true)?;
-        let conn = Connection::new(tokio::net::TcpStream::from_std(tcp_stream)?);
+        let mut conn = Connection::new(tokio::net::TcpStream::from_std(tcp_stream)?);
+        conn.send(RawPacketBuilder::new(0).var_int(776.into()).unwrap().string_slice("localhost").unwrap().unsigned_short(25565).unwrap().var_int(2.into()).unwrap().build()).await;
         self.connection = Some(conn);
-        log::info!("Connected!");
+        log::info!("Connected to backend!");
         Ok(())
     }
 
     async fn send_packet(&mut self, packet: RawPacket) -> Result<(), ProxyBackendError> {
         if self.connection.is_none() {
-            self.init()?;
+            log::warn!("sending packet without initing server!");
+            self.init().await?;
         }
         match &mut self.connection {
             Some(handle) => {
