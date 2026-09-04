@@ -19,7 +19,7 @@ impl Decoder for MinecraftPacketDecoder {
     type Error = std::io::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let (packet_length, int_size) = match VarInt::decode(src) {
+        let (packet_length, int_size) = match VarInt::decode_bounded::<3>(src) {
             Ok(value) => value,
             Err(DecodeError::Incomplete) => return Ok(None), // not enough data for a varint
             Err(DecodeError::Invalid(error)) => {

@@ -15,6 +15,41 @@ impl VarInt {
     pub fn value(self) -> i32 {
         self.0
     }
+
+    pub fn decode_bounded<const MAX_BYTES: usize>(buffer: &[u8]) -> Result<(VarInt, usize), DecodeError> {
+        const { assert!(MAX_BYTES <= 5); }
+        let mut value: u32 = 0;
+
+        let mut position: u32 = 0;
+        for cursor in 0..MAX_BYTES {
+            let current_byte: &u8 = match buffer.get(cursor) {
+                Some(value) => value,
+                None => return Err(DecodeError::Incomplete),
+            };
+            value |= ((current_byte & 0x7F) as u32) << position;
+
+            if (current_byte & 0x80) == 0 {
+                return Ok((VarInt(value.cast_signed()), cursor + 1));
+            }
+
+            position += 7;
+        }
+        Err(DecodeError::Invalid("VarInt is too long".to_string()))
+    }
+
+    pub const fn get_var_int_encoded_length(value: u32) -> usize {
+        if value < 0x80 {
+            1
+        } else if value < 0x4000 {
+            2
+        } else if value < 0x20_0000 {
+            3
+        } else if value < 0x1000_0000 {
+            4
+        } else {
+            5
+        }
+    }
 }
 
 impl RawPacketEncodable for VarInt {
@@ -33,43 +68,13 @@ impl RawPacketEncodable for VarInt {
 
     fn get_encoded_length(&self) -> usize {
         let value: u32 = self.value() as u32;
-        get_var_int_encoded_length(value)
-    }
-}
-
-pub fn get_var_int_encoded_length(value: u32) -> usize {
-    if value < 0x80 {
-        1
-    } else if value < 0x4000 {
-        2
-    } else if value < 0x20_0000 {
-        3
-    } else if value < 0x1000_0000 {
-        4
-    } else {
-        5
+        VarInt::get_var_int_encoded_length(value)
     }
 }
 
 impl RawPacketDecodable for VarInt {
     fn decode(buffer: &[u8]) -> Result<(VarInt, usize), DecodeError> {
-        let mut value: u32 = 0;
-
-        let mut position: u32 = 0;
-        for cursor in 0..5 {
-            let current_byte: &u8 = match buffer.get(cursor) {
-                Some(value) => value,
-                None => return Err(DecodeError::Incomplete),
-            };
-            value |= ((current_byte & 0x7F) as u32) << position;
-
-            if (current_byte & 0x80) == 0 {
-                return Ok((VarInt(value.cast_signed()), cursor + 1));
-            }
-
-            position += 7;
-        }
-        Err(DecodeError::Invalid("VarInt is too long".to_string()))
+        VarInt::decode_bounded::<5>(buffer)
     }
 }
 
@@ -85,6 +90,13 @@ impl From<i32> for VarInt {
     }
 }
 
+impl TryFrom<u32> for VarInt {
+    type Error = TryFromIntError;
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        Ok(VarInt(value.try_into()?))
+    }
+}
+
 impl From<VarInt> for i32 {
     fn from(value: VarInt) -> Self {
         value.0
@@ -95,6 +107,13 @@ impl TryFrom<VarInt> for usize {
     type Error = TryFromIntError;
     fn try_from(value: VarInt) -> Result<Self, Self::Error> {
         usize::try_from(value.0)
+    }
+}
+
+impl TryFrom<VarInt> for u32 {
+    type Error = TryFromIntError;
+    fn try_from(value: VarInt) -> Result<Self, Self::Error> {
+        u32::try_from(value.0)
     }
 }
 
