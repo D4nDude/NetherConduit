@@ -1,6 +1,7 @@
 use std::fmt::Display;
 
 use super::{MinecraftPacket, MinecraftPacketType};
+use crate::packet::builder::RawPacketBuilder;
 use crate::packet::stream::DecodeError;
 use crate::packet::{RawPacket, decoder::RawPacketDecoder};
 
@@ -14,6 +15,10 @@ impl MinecraftPacket for PingRequestPacket {
         let mut parser: RawPacketDecoder = RawPacketDecoder::new(raw_packet.payload()?);
         let payload = parser.long()?;
         Ok(Self { payload })
+    }
+
+    fn into_raw(self) -> Result<RawPacket, crate::packet::stream::EncodeError> {
+        Ok(RawPacketBuilder::new(0)?.long(self.payload)?.build())
     }
 
     fn packet_type() -> MinecraftPacketType {

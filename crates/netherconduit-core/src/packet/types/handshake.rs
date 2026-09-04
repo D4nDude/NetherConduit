@@ -1,6 +1,8 @@
 use std::fmt::Display;
 
 use super::{MinecraftPacket, MinecraftPacketType};
+use crate::packet::builder::RawPacketBuilder;
+use crate::packet::primitives::VarInt;
 use crate::packet::stream::DecodeError;
 use crate::packet::{RawPacket, decoder::RawPacketDecoder};
 use crate::server::protocol_version::ConnectionProtocolVersion;
@@ -18,6 +20,22 @@ pub struct HandshakePacket {
     pub server_address: String,
     pub server_port: u16,
     pub intent: HandshakeIntent,
+}
+
+impl HandshakePacket {
+    pub fn new(
+        protocol_version: ConnectionProtocolVersion,
+        server_address: &str,
+        server_port: u16,
+        intent: HandshakeIntent,
+    ) -> Self {
+        HandshakePacket {
+            protocol_version,
+            server_address: server_address.to_string(),
+            server_port,
+            intent,
+        }
+    }
 }
 
 impl MinecraftPacket for HandshakePacket {
@@ -43,6 +61,15 @@ impl MinecraftPacket for HandshakePacket {
             server_port,
             intent,
         })
+    }
+
+    fn into_raw(self) -> Result<RawPacket, crate::packet::stream::EncodeError> {
+        Ok(RawPacketBuilder::new(0)?
+            .var_int(VarInt::try_from(self.protocol_version.protocol())?)?
+            .string_slice(&self.server_address)?
+            .unsigned_short(self.server_port)?
+            .var_int(self.intent as i32)?
+            .build())
     }
 
     fn packet_type() -> MinecraftPacketType {

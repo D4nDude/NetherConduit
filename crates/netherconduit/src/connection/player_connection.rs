@@ -237,6 +237,7 @@ fn handle_status(server_status: ServerStatus, packet: &RawPacket) -> PacketActio
         0 => {
             log::debug!("Status Check");
             let return_packet = RawPacketBuilder::new(0)
+                .unwrap()
                 .string(
                     server_status
                         .to_json()
@@ -257,6 +258,7 @@ fn handle_status(server_status: ServerStatus, packet: &RawPacket) -> PacketActio
             };
             log::debug!("Ping Request: {:#?}", ping_request_packet);
             let return_packet = RawPacketBuilder::new(1)
+                .unwrap()
                 .long(ping_request_packet.payload)
                 .unwrap()
                 .build();

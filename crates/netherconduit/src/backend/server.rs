@@ -1,5 +1,9 @@
 use async_trait::async_trait;
-use netherconduit_core::packet::{RawPacket, builder::RawPacketBuilder};
+use netherconduit_core::packet::{
+    RawPacket,
+    builder::RawPacketBuilder,
+    types::{HandshakePacket, MinecraftPacket, Packet::Handshake},
+};
 use std::net::TcpStream;
 
 use crate::{
@@ -43,7 +47,14 @@ impl ProxyBackend for ProxyServerBackend {
         };
         tcp_stream.set_nonblocking(true)?;
         let mut conn = Connection::new(tokio::net::TcpStream::from_std(tcp_stream)?);
-        conn.send(RawPacketBuilder::new(0).var_int(776.into()).unwrap().string_slice("localhost").unwrap().unsigned_short(25565).unwrap().var_int(2.into()).unwrap().build()).await;
+        let handshake_info = HandshakePacket::new(
+            netherconduit_core::server::protocol_version::ConnectionProtocolVersion::MC776,
+            "localhost",
+            25565,
+            netherconduit_core::packet::types::handshake::HandshakeIntent::Login,
+        );
+        log::debug!("Sending Handshake: {:?}", handshake_info);
+        conn.send(handshake_info.into_raw()?).await;
         self.connection = Some(conn);
         log::info!("Connected to backend!");
         Ok(())
