@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use netherconduit_core::packet::RawPacket;
+use netherconduit_core::packet::{RawPacket, stream::EncodeError};
 
 mod server;
 pub use server::ProxyServerBackend;
@@ -10,11 +10,18 @@ pub(crate) enum ProxyBackendError {
     FailedToInit(String),
     IOError(std::io::Error),
     InvalidState(String),
+    EncodeError(EncodeError),
 }
 
 impl From<std::io::Error> for ProxyBackendError {
     fn from(value: std::io::Error) -> Self {
         ProxyBackendError::IOError(value)
+    }
+}
+
+impl From<EncodeError> for ProxyBackendError {
+    fn from(value: EncodeError) -> Self {
+        ProxyBackendError::EncodeError(value)
     }
 }
 

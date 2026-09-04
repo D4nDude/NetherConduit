@@ -2,8 +2,6 @@ use bytes::BytesMut;
 use tokio_util::codec::Encoder;
 
 use crate::packet::RawPacket;
-use crate::packet::primitives::VarInt;
-use crate::packet::stream::RawPacketEncodable;
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct MinecraftPacketEncoder {}
@@ -18,9 +16,7 @@ impl Encoder<RawPacket> for MinecraftPacketEncoder {
     type Error = std::io::Error;
 
     fn encode(&mut self, item: RawPacket, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        let packet_length = VarInt::new(i32::try_from(item.data.len()).unwrap());
-        packet_length.encode(dst).unwrap();
-        dst.extend(item.data);
+        dst.extend(item.raw_data);
         Ok(())
     }
 }

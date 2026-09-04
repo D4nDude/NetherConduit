@@ -1,5 +1,5 @@
 use crate::packet::{
-    primitives::{VarInt, var_int},
+    primitives::VarInt,
     stream::{DecodeError, EncodeError, RawPacketDecodable, RawPacketEncodable},
 };
 
@@ -44,7 +44,7 @@ impl RawPacketEncodable for &str {
     }
 
     fn get_encoded_length(&self) -> usize {
-        self.len() + var_int::get_var_int_encoded_length(self.len().try_into().unwrap())
+        self.len() + VarInt::get_var_int_encoded_length(self.len().try_into().unwrap())
     }
 }
 

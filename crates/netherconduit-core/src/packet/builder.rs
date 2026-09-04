@@ -12,19 +12,17 @@ pub struct RawPacketBuilder {
 }
 
 impl RawPacketBuilder {
-    pub fn new(id: impl Into<VarInt>) -> Self {
+    pub fn new(id: impl Into<VarInt>) -> Result<Self, EncodeError> {
         let id = id.into();
 
         let mut data = BytesMut::new();
-        id.encode(&mut data).unwrap();
+        id.encode(&mut data)?;
 
-        Self { data }
+        Ok(Self { data })
     }
 
     pub fn build(self) -> RawPacket {
-        RawPacket {
-            data: self.data.freeze(),
-        }
+        RawPacket::from_data(self.data.freeze())
     }
 
     pub fn put(mut self, data: impl RawPacketEncodable) -> Result<Self, EncodeError> {
@@ -93,7 +91,8 @@ impl RawPacketBuilder {
         Ok(self)
     }
 
-    pub fn var_int(mut self, var_int: VarInt) -> Result<Self, EncodeError> {
+    pub fn var_int(mut self, var_int: impl Into<VarInt>) -> Result<Self, EncodeError> {
+        let var_int:VarInt = var_int.into();
         var_int.encode(&mut self.data)?;
         Ok(self)
     }
@@ -101,8 +100,6 @@ impl RawPacketBuilder {
 
 impl From<RawPacketBuilder> for RawPacket {
     fn from(builder: RawPacketBuilder) -> Self {
-        RawPacket {
-            data: builder.data.freeze(),
-        }
+        builder.build()
     }
 }

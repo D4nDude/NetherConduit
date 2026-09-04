@@ -1,9 +1,11 @@
-use bytes::{Buf, BytesMut};
+use bytes::BytesMut;
 use tokio_util::codec::Decoder;
 
 use crate::packet::RawPacket;
 use crate::packet::primitives::VarInt;
-use crate::packet::stream::{DecodeError, RawPacketDecodable};
+use crate::packet::stream::DecodeError;
+
+const MAX_PACKET_SIZE: usize = (2 ^ 21) - 1;
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct MinecraftPacketDecoder {}
@@ -29,19 +31,38 @@ impl Decoder for MinecraftPacketDecoder {
                 ));
             }
         };
+        
+        // check length is not negative
+        let packet_length = match usize::try_from(packet_length) {
+            Ok(size) => size,
+            Err(error) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Packet length could not be converted to usize: {error}"),
+                ));
+            }
+        };
 
-        let full_packet_length = usize::try_from(packet_length).unwrap() + int_size;
+        // check packet is not too long
+        if packet_length > MAX_PACKET_SIZE {
+            return Err(
+                std::io::Error::new(std::io::ErrorKind::InvalidData,
+                format!("Packet Length is defined too long: {packet_length}"),
+            ))
+        }
+
+        
+
+        let full_packet_length = packet_length + int_size;
 
         // incomplete packet
         if src.len() < full_packet_length {
             return Ok(None);
         };
 
-        src.advance(int_size);
+        let data = src.split_to(full_packet_length);
 
-        let data = src.split_to(usize::try_from(packet_length).unwrap());
-
-        Ok(Some(RawPacket::new(data.freeze())))
+        Ok(Some(RawPacket::new(data.freeze(), int_size)))
     }
 }
 
