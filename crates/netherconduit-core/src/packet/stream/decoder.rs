@@ -31,7 +31,7 @@ impl Decoder for MinecraftPacketDecoder {
                 ));
             }
         };
-        
+
         // check length is not negative
         let packet_length = match usize::try_from(packet_length) {
             Ok(size) => size,
@@ -45,13 +45,11 @@ impl Decoder for MinecraftPacketDecoder {
 
         // check packet is not too long
         if packet_length > MAX_PACKET_SIZE {
-            return Err(
-                std::io::Error::new(std::io::ErrorKind::InvalidData,
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
                 format!("Packet Length is defined too long: {packet_length}"),
-            ))
+            ));
         }
-
-        
 
         let full_packet_length = packet_length + int_size;
 

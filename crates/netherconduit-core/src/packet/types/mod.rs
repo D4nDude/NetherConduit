@@ -4,7 +4,10 @@ mod status;
 pub use handshake::HandshakePacket;
 pub use status::PingRequestPacket;
 
-use crate::packet::{RawPacket, stream::{DecodeError, EncodeError}};
+use crate::packet::{
+    RawPacket,
+    stream::{DecodeError, EncodeError},
+};
 
 pub trait MinecraftPacket: Sized {
     fn from_raw(raw_packet: &RawPacket) -> Result<Self, DecodeError>;

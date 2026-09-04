@@ -92,7 +92,7 @@ impl RawPacketBuilder {
     }
 
     pub fn var_int(mut self, var_int: impl Into<VarInt>) -> Result<Self, EncodeError> {
-        let var_int:VarInt = var_int.into();
+        let var_int: VarInt = var_int.into();
         var_int.encode(&mut self.data)?;
         Ok(self)
     }

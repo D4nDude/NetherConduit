@@ -16,8 +16,12 @@ impl VarInt {
         self.0
     }
 
-    pub fn decode_bounded<const MAX_BYTES: usize>(buffer: &[u8]) -> Result<(VarInt, usize), DecodeError> {
-        const { assert!(MAX_BYTES <= 5); }
+    pub fn decode_bounded<const MAX_BYTES: usize>(
+        buffer: &[u8],
+    ) -> Result<(VarInt, usize), DecodeError> {
+        const {
+            assert!(MAX_BYTES <= 5);
+        }
         let mut value: u32 = 0;
 
         let mut position: u32 = 0;
