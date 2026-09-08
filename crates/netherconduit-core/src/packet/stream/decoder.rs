@@ -5,7 +5,7 @@ use crate::packet::RawPacket;
 use crate::packet::primitives::VarInt;
 use crate::packet::stream::DecodeError;
 
-const MAX_PACKET_SIZE: usize = (2 ^ 21) - 1;
+const MAX_PACKET_SIZE: usize = (1 << 21) - 1; // 2097151 bytes
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct MinecraftPacketDecoder {}
