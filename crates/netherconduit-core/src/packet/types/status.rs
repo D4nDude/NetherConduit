@@ -1,9 +1,10 @@
 use std::fmt::Display;
 
-use super::{MinecraftPacket, MinecraftPacketType};
+use super::MinecraftPacket;
 use crate::packet::builder::RawPacketBuilder;
 use crate::packet::stream::DecodeError;
 use crate::packet::{RawPacket, decoder::RawPacketDecoder};
+use crate::registry::packet::{PacketType, get_packet_id};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PingRequestPacket {
@@ -21,8 +22,10 @@ impl MinecraftPacket for PingRequestPacket {
         Ok(RawPacketBuilder::new(0)?.long(self.payload)?.build())
     }
 
-    fn packet_type() -> MinecraftPacketType {
-        MinecraftPacketType::PingRequest
+    fn get_id(
+        protocol_version: crate::server::protocol_version::ConnectionProtocolVersion,
+    ) -> u32 {
+        get_packet_id(protocol_version, PacketType::PingRequest)
     }
 }
 

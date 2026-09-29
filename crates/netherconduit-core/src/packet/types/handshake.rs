@@ -1,10 +1,11 @@
 use std::fmt::Display;
 
-use super::{MinecraftPacket, MinecraftPacketType};
+use super::MinecraftPacket;
 use crate::packet::builder::RawPacketBuilder;
 use crate::packet::primitives::VarInt;
 use crate::packet::stream::DecodeError;
 use crate::packet::{RawPacket, decoder::RawPacketDecoder};
+use crate::registry::packet::{PacketType, get_packet_id};
 use crate::server::protocol_version::ConnectionProtocolVersion;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -72,8 +73,8 @@ impl MinecraftPacket for HandshakePacket {
             .build())
     }
 
-    fn packet_type() -> MinecraftPacketType {
-        MinecraftPacketType::Handshake
+    fn get_id(protocol_version: ConnectionProtocolVersion) -> u32 {
+        get_packet_id(protocol_version, PacketType::Handshake)
     }
 }
 
