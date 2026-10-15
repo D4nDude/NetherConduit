@@ -1,4 +1,4 @@
-FROM rust:1.98.0 AS chef
+FROM rust:1.99.0 AS chef
 
 RUN cargo install --locked cargo-chef
 WORKDIR /app
@@ -7,6 +7,7 @@ FROM chef AS planner
 COPY Cargo.toml .
 COPY Cargo.lock .
 COPY ./crates ./crates
+COPY ./.cargo ./.cargo
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
@@ -15,12 +16,14 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY Cargo.toml .
 COPY Cargo.lock .
 COPY ./crates ./crates
-RUN cargo build --release --bin netherconduit
+COPY ./.cargo ./.cargo
+RUN RUSTFLAGS="--cfg tokio_unstable" cargo build --release --bin netherconduit
 
 FROM debian:trixie-slim AS runtime
 WORKDIR /app
 COPY --from=builder /app/target/release/netherconduit /usr/local/bin
 
 EXPOSE 25565
+EXPOSE 6669
 
 ENTRYPOINT [ "/usr/local/bin/netherconduit"]
