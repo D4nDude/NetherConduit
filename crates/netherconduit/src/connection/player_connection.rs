@@ -12,7 +12,7 @@ use tokio::{net::TcpStream, sync::watch::Receiver};
 
 use crate::{
     backend::{ProxyBackend, ProxyServerBackend},
-    connection::Connection,
+    connection::TcpConnection,
     core::proxy::ProxyConfig,
 };
 
@@ -29,7 +29,7 @@ pub(crate) enum PacketAction {
 
 pub(crate) struct PlayerConnectionManager {
     state: ConnectionState,
-    player_connection: Connection,
+    player_connection: TcpConnection,
     protocol_version: Option<ConnectionProtocolVersion>,
     connection_backend: Box<dyn ProxyBackend>,
     proxy_configuration_reciever: Receiver<ProxyConfig>,
@@ -51,7 +51,7 @@ impl PlayerConnectionManager {
         player_stream: TcpStream,
         proxy_configuration_reciever: Receiver<ProxyConfig>,
     ) -> PlayerConnectionManager {
-        let player_connection = Connection::new(player_stream);
+        let player_connection = TcpConnection::new(player_stream);
 
         // TODO: Temprary setup of default backend. Will be moved to after login
         let server_backend = ProxyServerBackend::new(

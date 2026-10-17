@@ -22,15 +22,15 @@ pub struct MinecraftConnectionConfig {
 }
 
 #[derive(Debug)]
-pub struct Connection {
+pub struct TcpConnection {
     reader: FramedRead<OwnedReadHalf, MinecraftPacketDecoder>,
     writer: FramedWrite<OwnedWriteHalf, MinecraftPacketEncoder>,
 
     shutdown_token: CancellationToken,
 }
 
-impl Connection {
-    pub(crate) fn new(tcp_stream: TcpStream) -> Connection {
+impl TcpConnection {
+    pub(crate) fn new(tcp_stream: TcpStream) -> TcpConnection {
         let (read_side, write_side) = tcp_stream.into_split();
 
         let decoder = MinecraftPacketDecoder::new();
@@ -39,7 +39,7 @@ impl Connection {
         let encoder = MinecraftPacketEncoder::new();
         let writer = FramedWrite::new(write_side, encoder);
 
-        Connection {
+        TcpConnection {
             reader,
             writer,
             shutdown_token: CancellationToken::new(),

@@ -7,14 +7,14 @@ use std::net::TcpStream;
 
 use crate::{
     backend::{ProxyBackend, ProxyBackendError},
-    connection::Connection,
+    connection::TcpConnection,
 };
 
 #[allow(unused)]
 pub struct ProxyServerBackend {
     address: String,
     port: u16,
-    connection: Option<Connection>,
+    connection: Option<TcpConnection>,
 }
 
 impl ProxyServerBackend {
@@ -45,7 +45,7 @@ impl ProxyBackend for ProxyServerBackend {
             }
         };
         tcp_stream.set_nonblocking(true)?;
-        let mut conn = Connection::new(tokio::net::TcpStream::from_std(tcp_stream)?);
+        let mut conn = TcpConnection::new(tokio::net::TcpStream::from_std(tcp_stream)?);
         let handshake_info = HandshakePacket::new(
             netherconduit_core::server::protocol_version::ConnectionProtocolVersion::MC776,
             "localhost",
