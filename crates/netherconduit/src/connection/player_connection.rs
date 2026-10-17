@@ -1,12 +1,10 @@
 use log::error;
 use netherconduit_core::{
-    connection::ConnectionState,
-    packet::{
+    connection::ConnectionState, packet::{
         RawPacket,
         builder::RawPacketBuilder,
         types::{HandshakePacket, MinecraftPacket, PingRequestPacket, handshake::HandshakeIntent},
-    },
-    server::{protocol_version::ConnectionProtocolVersion, status::ServerStatus},
+    }, server::{protocol_version::ConnectionProtocolVersion, status::ServerStatus},
 };
 use tokio::{net::TcpStream, sync::watch::Receiver};
 
@@ -31,7 +29,6 @@ pub(crate) struct PlayerConnectionManager {
     state: ConnectionState,
     player_connection: TcpConnection,
     protocol_version: Option<ConnectionProtocolVersion>,
-    connection_backend: Box<dyn ProxyBackend>,
     proxy_configuration_reciever: Receiver<ProxyConfig>,
 }
 
@@ -53,17 +50,10 @@ impl PlayerConnectionManager {
     ) -> PlayerConnectionManager {
         let player_connection = TcpConnection::new(player_stream);
 
-        // TODO: Temprary setup of default backend. Will be moved to after login
-        let server_backend = ProxyServerBackend::new(
-            &proxy_configuration_reciever.borrow().default_server,
-            proxy_configuration_reciever.borrow().default_server_port,
-        );
-
         PlayerConnectionManager {
             state: ConnectionState::Handshake,
             player_connection,
             protocol_version: None,
-            connection_backend: Box::new(server_backend),
             proxy_configuration_reciever,
         }
     }
@@ -73,7 +63,7 @@ impl PlayerConnectionManager {
 
         // First the handshake
         log::info!("Handshaking");
-        let (initial_state, protocol_version) = match self.player_connection.read().await {
+        let (initial_state, protocol_version) = match self.next_player_packet().await {
             Some(packet) => handle_handshake(&packet),
             None => {
                 log::error!("Invalid/no packet recieved. Disconnecting");
@@ -89,7 +79,7 @@ impl PlayerConnectionManager {
         // Status Check
         while self.state == ConnectionState::Status {
             log::info!("Status check!");
-            let (action, original_packet) = match self.player_connection.read().await {
+            self.state = match self.player_connection.read().await {
                 Some(packet) => {
                     let server_status = ServerStatus::new(
                         self.protocol_version.unwrap(),
@@ -99,23 +89,27 @@ impl PlayerConnectionManager {
                             .description
                             .as_str(),
                     );
-                    (handle_status(server_status, &packet), Some(packet))
+                    handle_status(&mut self.player_connection, server_status, &packet).await
                 }
                 None => {
                     log::error!("Invalid/no packet recieved. Disconnecting");
-                    (PacketAction::Disconnect, None)
+                    ConnectionState::Disconnecting
                 }
             };
-            self.state = self
-                .handle_action(action, original_packet)
-                .await
-                .unwrap_or(self.state)
         }
 
         while self.state == ConnectionState::Login {
-            self.connection_backend.init().await.unwrap();
             self.state = ConnectionState::Play;
         }
+
+        // TODO: Temprary setup of default backend. need to setup based on default
+        let mut connection_backend = ProxyServerBackend::new(
+            &self.proxy_configuration_reciever.borrow().default_server,
+            self.proxy_configuration_reciever
+                .borrow()
+                .default_server_port,
+        );
+        connection_backend.init().await.unwrap();
 
         while self.state != ConnectionState::Disconnecting {
             if self.state != ConnectionState::Play {
@@ -140,11 +134,11 @@ impl PlayerConnectionManager {
                     tokio::select! {
                         packet = self.player_connection.read() => {
                             match packet {
-                                Some(packet) => { self.send_packet_to_server(packet).await; ConnectionState::Play },
+                                Some(packet) => { send_packet_to_server(&mut connection_backend, packet).await; ConnectionState::Play },
                                 None => {log::warn!("Player Connection Disconnected");ConnectionState::Disconnecting},
                             }
                         }
-                        packet = self.connection_backend.read_packet() => {
+                        packet = connection_backend.read_packet() => {
                             match packet.expect("Backend shouldnt close first") {
                                 Some(packet) => { self.send_packet_to_client(packet).await; ConnectionState::Play },
                                 None => {log::warn!("Backend Connection Disconnected");ConnectionState::Disconnecting},
@@ -167,13 +161,8 @@ impl PlayerConnectionManager {
         log::info!("Connection Terminated.");
     }
 
-    async fn send_packet_to_server(&mut self, packet: RawPacket) {
-        // log::debug!("Sending to Server: {:?}", packet);
-        self.connection_backend
-            .as_mut()
-            .send_packet(packet)
-            .await
-            .expect("Could not send to server")
+    async fn next_player_packet(&mut self) -> Option<RawPacket> {
+        self.player_connection.read().await
     }
 
     async fn send_packet_to_client(&mut self, packet: RawPacket) {
@@ -181,14 +170,16 @@ impl PlayerConnectionManager {
         self.player_connection.send(packet).await
     }
 
-    async fn handle_action(
+    async fn handle_action<T: ProxyBackend>(
         &mut self,
+        backend: &mut T,
         action: PacketAction,
         original_packet: Option<RawPacket>,
     ) -> Option<ConnectionState> {
         match action {
             PacketAction::Forward => {
-                self.send_packet_to_server(
+                send_packet_to_server(
+                    backend,
                     original_packet
                         .expect("Should not forward withot passing packet")
                         .clone(),
@@ -202,13 +193,14 @@ impl PlayerConnectionManager {
                     original_packet,
                     next_action
                 );
-                self.send_packet_to_server(
+                send_packet_to_server(
+                    backend,
                     original_packet
                         .clone()
                         .expect("Should not forward withot passing packet"),
                 )
                 .await;
-                Box::pin(self.handle_action(*next_action, original_packet)).await
+                Box::pin(self.handle_action(backend, *next_action, original_packet)).await
             }
             PacketAction::Return(packet) => {
                 log::trace!("Returning Packet: {:#?}", packet);
@@ -222,7 +214,7 @@ impl PlayerConnectionManager {
                     next_action
                 );
                 self.send_packet_to_client(packet).await;
-                Box::pin(self.handle_action(*next_action, original_packet)).await
+                Box::pin(self.handle_action(backend, *next_action, original_packet)).await
             }
             PacketAction::UpdateState(new_state) => {
                 log::debug!("Switching state to {new_state}");
@@ -233,6 +225,15 @@ impl PlayerConnectionManager {
     }
 }
 
+async fn send_packet_to_server<T: ProxyBackend>(connection_backend: &mut T, packet: RawPacket) {
+    // log::debug!("Sending to Server: {:?}", packet);
+    connection_backend
+        .send_packet(packet)
+        .await
+        .expect("Could not send to server")
+}
+
+// Helper function to handle handshake flow
 fn handle_handshake(raw_packet: &RawPacket) -> (ConnectionState, ConnectionProtocolVersion) {
     let packet = match HandshakePacket::from_raw(raw_packet) {
         Ok(value) => value,
@@ -255,7 +256,8 @@ fn handle_handshake(raw_packet: &RawPacket) -> (ConnectionState, ConnectionProto
     )
 }
 
-fn handle_status(server_status: ServerStatus, packet: &RawPacket) -> PacketAction {
+// Helper function to handle status flow
+async fn handle_status(connection: &mut TcpConnection, server_status: ServerStatus, packet: &RawPacket) -> ConnectionState {
     log::trace!("Incoming Status: {packet}");
     match packet.id().unwrap().value() {
         0 => {
@@ -269,7 +271,8 @@ fn handle_status(server_status: ServerStatus, packet: &RawPacket) -> PacketActio
                 )
                 .unwrap()
                 .build();
-            PacketAction::Return(return_packet)
+            connection.send(return_packet).await;
+            ConnectionState::Status
             // PacketAction::ReturnAnd(return_packet, Box::new(PacketAction::Disconnect))
         }
         1 => {
@@ -277,7 +280,7 @@ fn handle_status(server_status: ServerStatus, packet: &RawPacket) -> PacketActio
                 Ok(value) => value,
                 Err(e) => {
                     log::error!("Decode Error: {:?}", e);
-                    return PacketAction::Disconnect;
+                    return ConnectionState::Disconnecting;
                 }
             };
             log::debug!("Ping Request: {:#?}", ping_request_packet);
@@ -286,11 +289,12 @@ fn handle_status(server_status: ServerStatus, packet: &RawPacket) -> PacketActio
                 .long(ping_request_packet.payload)
                 .unwrap()
                 .build();
-            PacketAction::ReturnAnd(return_packet, Box::new(PacketAction::Disconnect))
+            connection.send(return_packet).await;
+            ConnectionState::Disconnecting
         }
         value => {
             log::warn!("Invalid status packet ID: {value}");
-            PacketAction::Disconnect
+            ConnectionState::Disconnecting
         }
     }
 }
