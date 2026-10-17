@@ -1,6 +1,6 @@
 use log::error;
 use netherconduit_core::{
-    connection::ConnectionState::{self, Status},
+    connection::ConnectionState,
     packet::{
         RawPacket,
         builder::RawPacketBuilder,

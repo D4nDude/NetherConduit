@@ -12,7 +12,10 @@ pub struct GameProfile {
 
 impl GameProfile {
     pub fn new(uuid: Uuid, username: &str) -> Self {
-        GameProfile { uuid, username: username.to_string() }
+        GameProfile {
+            uuid,
+            username: username.to_string(),
+        }
     }
 }
 

@@ -2,7 +2,9 @@ use bytes::BytesMut;
 use serde::Serialize;
 
 use crate::packet::{
-    RawPacket, primitives::{GameProfile, VarInt}, stream::{EncodeError, RawPacketEncodable},
+    RawPacket,
+    primitives::{GameProfile, VarInt},
+    stream::{EncodeError, RawPacketEncodable},
 };
 
 pub struct RawPacketBuilder {
