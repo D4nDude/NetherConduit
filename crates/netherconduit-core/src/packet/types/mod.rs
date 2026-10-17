@@ -19,3 +19,20 @@ pub trait MinecraftPacket: Sized {
     // fn packet_type() -> MinecraftPacketType;
     fn get_id(protocol_version: ConnectionProtocolVersion) -> u32;
 }
+
+#[cfg(test)]
+mod test {
+
+    pub(super) fn assert_packet_round_trip<P>(packet: P)
+    where
+        P: super::MinecraftPacket + PartialEq + std::fmt::Debug + Clone,
+    {
+        let expected = packet.clone();
+
+        let raw = packet.into_raw().expect("packet encoding should succeed");
+
+        let decoded = P::from_raw(&raw).expect("packet decoding should succeed");
+
+        assert_eq!(decoded, expected);
+    }
+}

@@ -11,6 +11,12 @@ pub struct PingRequestPacket {
     pub payload: i64,
 }
 
+impl PingRequestPacket {
+    pub fn new(payload: i64) -> Self {
+        PingRequestPacket { payload }
+    }
+}
+
 impl MinecraftPacket for PingRequestPacket {
     fn from_raw(raw_packet: &RawPacket) -> Result<Self, DecodeError> {
         let mut parser: RawPacketDecoder = RawPacketDecoder::new(raw_packet.payload()?);
@@ -22,9 +28,7 @@ impl MinecraftPacket for PingRequestPacket {
         Ok(RawPacketBuilder::new(0)?.long(self.payload)?.build())
     }
 
-    fn get_id(
-        protocol_version: crate::server::protocol_version::ConnectionProtocolVersion,
-    ) -> u32 {
+    fn get_id(protocol_version: crate::server::protocol_version::ConnectionProtocolVersion) -> u32 {
         get_packet_id(protocol_version, PacketType::PingRequest)
     }
 }
@@ -32,5 +36,19 @@ impl MinecraftPacket for PingRequestPacket {
 impl Display for PingRequestPacket {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "(PingRequestPacket Packet: {})", self.payload)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::PingRequestPacket;
+
+    use super::super::test::assert_packet_round_trip;
+
+    #[test]
+    fn ping_request_packet_round_trip() {
+        let packet = PingRequestPacket::new(25565);
+
+        assert_packet_round_trip(packet);
     }
 }

@@ -10,9 +10,9 @@ use crate::server::protocol_version::ConnectionProtocolVersion;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum HandshakeIntent {
-    Status,
-    Login,
-    Transfer,
+    Status = 1,
+    Login = 2,
+    Transfer = 3,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -85,5 +85,24 @@ impl Display for HandshakePacket {
             "(Handshake Packet: {}, \"{}\", {}, {:?})",
             self.protocol_version, self.server_address, self.server_port, self.intent
         )
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::packet::types::HandshakePacket;
+
+    use super::super::test::assert_packet_round_trip;
+
+    #[test]
+    fn handshake_packet_round_trip() {
+        let packet = HandshakePacket::new(
+            crate::server::protocol_version::ConnectionProtocolVersion::MC776,
+            "localhost",
+            25565,
+            super::HandshakeIntent::Login,
+        );
+
+        assert_packet_round_trip(packet);
     }
 }
