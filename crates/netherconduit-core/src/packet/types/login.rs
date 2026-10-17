@@ -39,9 +39,7 @@ impl MinecraftPacket for LoginStartPacket {
             .build())
     }
 
-    fn get_id(
-        protocol_version: crate::server::protocol_version::ConnectionProtocolVersion,
-    ) -> u32 {
+    fn get_id(protocol_version: crate::server::protocol_version::ConnectionProtocolVersion) -> u32 {
         get_packet_id(protocol_version, PacketType::LoginStart)
     }
 }
@@ -56,6 +54,15 @@ impl Display for LoginStartPacket {
 pub struct LoginSuccessPacket {
     pub profile: GameProfile,
     pub session_id: Uuid,
+}
+
+impl LoginSuccessPacket {
+    pub fn new(profile: GameProfile, session_id: Uuid) -> Self {
+        LoginSuccessPacket {
+            profile,
+            session_id,
+        }
+    }
 }
 
 impl MinecraftPacket for LoginSuccessPacket {
@@ -76,15 +83,17 @@ impl MinecraftPacket for LoginSuccessPacket {
             .build())
     }
 
-    fn get_id(
-        protocol_version: crate::server::protocol_version::ConnectionProtocolVersion,
-    ) -> u32 {
+    fn get_id(protocol_version: crate::server::protocol_version::ConnectionProtocolVersion) -> u32 {
         get_packet_id(protocol_version, PacketType::LoginSuccess)
     }
 }
 
 impl Display for LoginSuccessPacket {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "(Login Success Packet: {}, \"{}\")", self.profile, self.session_id)
+        write!(
+            f,
+            "(Login Success Packet: {}, \"{}\")",
+            self.profile, self.session_id
+        )
     }
 }
