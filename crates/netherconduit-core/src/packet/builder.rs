@@ -2,9 +2,7 @@ use bytes::BytesMut;
 use serde::Serialize;
 
 use crate::packet::{
-    RawPacket,
-    primitives::VarInt,
-    stream::{EncodeError, RawPacketEncodable},
+    RawPacket, primitives::{GameProfile, VarInt}, stream::{EncodeError, RawPacketEncodable},
 };
 
 pub struct RawPacketBuilder {
@@ -38,6 +36,11 @@ impl RawPacketBuilder {
 
     pub fn byte(mut self, byte: i8) -> Result<Self, EncodeError> {
         byte.encode(&mut self.data)?;
+        Ok(self)
+    }
+
+    pub fn bytes(mut self, byte_array: &[u8]) -> Result<Self, EncodeError> {
+        self.data.extend_from_slice(byte_array);
         Ok(self)
     }
 
@@ -94,6 +97,11 @@ impl RawPacketBuilder {
     pub fn var_int(mut self, var_int: impl Into<VarInt>) -> Result<Self, EncodeError> {
         let var_int: VarInt = var_int.into();
         var_int.encode(&mut self.data)?;
+        Ok(self)
+    }
+
+    pub fn game_profile(mut self, game_profile: GameProfile) -> Result<Self, EncodeError> {
+        game_profile.encode(&mut self.data)?;
         Ok(self)
     }
 }

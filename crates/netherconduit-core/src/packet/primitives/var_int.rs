@@ -16,6 +16,10 @@ impl VarInt {
         self.0
     }
 
+    pub fn value_u32(self) -> Result<u32, TryFromIntError> {
+        self.value().try_into()
+    }
+
     pub fn decode_bounded<const MAX_BYTES: usize>(
         buffer: &[u8],
     ) -> Result<(VarInt, usize), DecodeError> {

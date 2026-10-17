@@ -1,8 +1,8 @@
 use bytes::Bytes;
+use uuid::Uuid;
 
 use crate::packet::{
-    primitives::VarInt,
-    stream::{DecodeError, RawPacketDecodable},
+    primitives::{GameProfile, VarInt}, stream::{DecodeError, RawPacketDecodable},
 };
 
 pub struct RawPacketDecoder {
@@ -79,5 +79,20 @@ impl RawPacketDecoder {
         let (var_int, int_len) = VarInt::decode(&self.data.slice(self.cursor..))?;
         self.cursor += int_len;
         Ok(var_int)
+    }
+
+    pub fn uuid(&mut self) -> Result<Uuid, DecodeError> {
+        if (self.cursor + 16) > self.data.len() {
+            return Err(DecodeError::Incomplete);
+        }
+        let uuid = *Uuid::from_bytes_ref(self.data.slice(self.cursor..(self.cursor + 16)).as_array::<16>().expect("Should be exactly 16 Bytes"));
+        self.cursor += 16;
+        Ok(uuid)
+    }
+
+    pub fn game_profile(&mut self) -> Result<GameProfile, DecodeError> {
+        let (game_profile, profile_len) = GameProfile::decode(&self.data.slice(self.cursor..))?;
+        self.cursor += profile_len;
+        Ok(game_profile)
     }
 }
