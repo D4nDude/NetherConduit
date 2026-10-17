@@ -91,7 +91,7 @@ impl ProxyBackend for ProxyServerBackend {
     }
 
     async fn shutdown(&mut self) -> Result<(), ProxyBackendError> {
-        if let Some(conn) = self.connection.take() {
+        if let Some(mut conn) = self.connection.take() {
             conn.shutdown().await
         }
         Ok(())

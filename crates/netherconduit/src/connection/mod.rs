@@ -5,6 +5,7 @@ use netherconduit_core::packet::RawPacket;
 use netherconduit_core::packet::stream::{
     decoder::MinecraftPacketDecoder, encoder::MinecraftPacketEncoder,
 };
+use netherconduit_core::server::protocol_version::ConnectionProtocolVersion;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
@@ -13,6 +14,12 @@ use tokio_util::codec::{FramedRead, FramedWrite};
 use tokio_util::sync::CancellationToken;
 
 pub(crate) mod player_connection;
+
+pub struct MinecraftConnectionConfig {
+    protocol_version: ConnectionProtocolVersion,
+    server_address: String,
+    server_port: u16,
+}
 
 #[derive(Debug)]
 pub struct Connection {
@@ -60,7 +67,10 @@ impl Connection {
 
                 // check if packet framer encountered error
                 match next_packet_result {
-                    Ok(packet) => Some(packet),
+                    Ok(packet) => {
+                        // log::trace!("Recieved packet: {packet}");
+                        Some(packet)
+                    },
                     Err(error) => {
                         error!("Failed to decode packet: {error}");
                         None
@@ -71,7 +81,7 @@ impl Connection {
     }
 
     pub async fn send(&mut self, packet: RawPacket) {
-        // log::trace!("Write task writing packet: {packet}");
+        // log::trace!("Sending packet: {packet}");
         tokio::select! {
             _ = self.shutdown_token.cancelled() => {
                 log::error!("Connection already shutdown");
@@ -93,7 +103,7 @@ impl Connection {
         }
     }
 
-    pub async fn shutdown(mut self) {
+    pub async fn shutdown(&mut self) {
         if self.shutdown_token.is_cancelled() {
             log::debug!("Connection already terminated");
             return;
@@ -101,7 +111,7 @@ impl Connection {
         self.shutdown_token.cancel();
         self.flush().await;
         log::debug!("Shutting down TCP connection");
-        if let Err(error) = self.writer.into_inner().shutdown().await {
+        if let Err(error) = self.writer.get_mut().shutdown().await {
             log::error!("Failed to shutdown TCP Connection: {error}")
         }
     }
