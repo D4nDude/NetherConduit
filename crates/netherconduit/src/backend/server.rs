@@ -80,7 +80,7 @@ impl ProxyBackend for ProxyServerBackend {
 
     async fn read_packet(&mut self) -> Result<Option<RawPacket>, ProxyBackendError> {
         match &mut self.connection {
-            Some(handle) => Ok(handle.read().await),
+            Some(handle) => Ok(Some(handle.read().await?)),
             None => {
                 log::error!("Handle terminated....");
                 Err(ProxyBackendError::InvalidState(

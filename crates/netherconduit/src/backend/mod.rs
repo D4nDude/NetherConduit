@@ -4,8 +4,9 @@ use netherconduit_core::packet::{
     stream::{DecodeError, EncodeError},
 };
 
-mod login;
+// mod login;
 mod server;
+use crate::connection::TcpConnectionError;
 pub use server::ProxyServerBackend;
 
 #[allow(dead_code)]
@@ -16,6 +17,7 @@ pub(crate) enum ProxyBackendError {
     InvalidState(String),
     EncodeError(EncodeError),
     DecodeError(DecodeError),
+    TcpError(TcpConnectionError),
 }
 
 impl From<std::io::Error> for ProxyBackendError {
@@ -27,6 +29,12 @@ impl From<std::io::Error> for ProxyBackendError {
 impl From<EncodeError> for ProxyBackendError {
     fn from(value: EncodeError) -> Self {
         ProxyBackendError::EncodeError(value)
+    }
+}
+
+impl From<TcpConnectionError> for ProxyBackendError {
+    fn from(value: TcpConnectionError) -> Self {
+        ProxyBackendError::TcpError(value)
     }
 }
 

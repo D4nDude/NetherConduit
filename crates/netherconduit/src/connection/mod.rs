@@ -1,11 +1,13 @@
+use anyhow::Result;
 // Connection handler
 use futures::sink::SinkExt;
-use log::error;
 use netherconduit_core::packet::RawPacket;
+use netherconduit_core::packet::stream::decoder::MinecraftPacketDecoderError;
 use netherconduit_core::packet::stream::{
     decoder::MinecraftPacketDecoder, encoder::MinecraftPacketEncoder,
 };
 use netherconduit_core::server::protocol_version::ConnectionProtocolVersion;
+use thiserror::Error;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
@@ -19,6 +21,18 @@ pub struct MinecraftConnectionConfig {
     protocol_version: ConnectionProtocolVersion,
     server_address: String,
     server_port: u16,
+}
+
+#[derive(Debug, Error)]
+pub(crate) enum TcpConnectionError {
+    #[error("Connection Already Shutdown.")]
+    ConnectionShutdown,
+    #[error("Stream Disconnected.")]
+    StreamDisconnected,
+    #[error("Error in Decoding Packet: {0}")]
+    FramerError(#[from] MinecraftPacketDecoderError),
+    #[error("Timeout Exceeded.")]
+    Timeout,
 }
 
 #[derive(Debug)]
@@ -46,11 +60,10 @@ impl TcpConnection {
         }
     }
 
-    pub async fn read(&mut self) -> Option<RawPacket> {
+    pub async fn read(&mut self) -> Result<RawPacket, TcpConnectionError> {
         tokio::select! {
             _ = self.shutdown_token.cancelled() => {
-                log::error!("Connection already shutdown");
-                None
+                Err(TcpConnectionError::ConnectionShutdown)
             }
 
             potential_next_packet = self.reader.next() => {
@@ -61,21 +74,12 @@ impl TcpConnection {
                     None => {
                         log::debug!("Read Stream Disconnected");
                         self.shutdown_token.cancel();
-                        return None
+                        return Err(TcpConnectionError::StreamDisconnected)
                     },
                 };
 
                 // check if packet framer encountered error
-                match next_packet_result {
-                    Ok(packet) => {
-                        // log::trace!("Recieved packet: {packet}");
-                        Some(packet)
-                    },
-                    Err(error) => {
-                        error!("Failed to decode packet: {error}");
-                        None
-                    }
-                }
+                Ok(next_packet_result?)
             }
         }
     }

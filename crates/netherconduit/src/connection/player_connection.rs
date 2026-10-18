@@ -1,16 +1,23 @@
 use log::error;
 use netherconduit_core::{
-    connection::ConnectionState, packet::{
+    connection::ConnectionState,
+    packet::{
         RawPacket,
         builder::RawPacketBuilder,
+        primitives::GameProfile,
         types::{HandshakePacket, MinecraftPacket, PingRequestPacket, handshake::HandshakeIntent},
-    }, server::{protocol_version::ConnectionProtocolVersion, status::ServerStatus},
+    },
+    server::{protocol_version::ConnectionProtocolVersion, status::ServerStatus},
 };
+use thiserror::Error;
 use tokio::{net::TcpStream, sync::watch::Receiver};
 
 use crate::{
     backend::{ProxyBackend, ProxyServerBackend},
-    connection::TcpConnection,
+    connection::{
+        TcpConnection, TcpConnectionError,
+        player_connection::PlayerConnectionError::LoginSequenceIncorrect,
+    },
     core::proxy::ProxyConfig,
 };
 
@@ -30,6 +37,16 @@ pub(crate) struct PlayerConnectionManager {
     player_connection: TcpConnection,
     protocol_version: Option<ConnectionProtocolVersion>,
     proxy_configuration_reciever: Receiver<ProxyConfig>,
+}
+
+#[derive(Debug, Error)]
+enum PlayerConnectionError {
+    #[error("Packet not recieved before timeout exceeded.")]
+    Timeout,
+    #[error("Error with player Tcp Connection: {0}.")]
+    TcpConnectionError(#[from] TcpConnectionError),
+    #[error("Login Packet Sequence was incorrect: {0}.")]
+    LoginSequenceIncorrect(&'static str),
 }
 
 // #[derive(Debug)]
@@ -64,9 +81,9 @@ impl PlayerConnectionManager {
         // First the handshake
         log::info!("Handshaking");
         let (initial_state, protocol_version) = match self.next_player_packet().await {
-            Some(packet) => handle_handshake(&packet),
-            None => {
-                log::error!("Invalid/no packet recieved. Disconnecting");
+            Ok(packet) => handle_handshake(&packet),
+            Err(e) => {
+                log::error!("Handshake TCP Error: {e}");
                 self.state = ConnectionState::LoginDisconnect;
                 self.shutdown().await;
                 self.state = ConnectionState::Closed;
@@ -79,8 +96,8 @@ impl PlayerConnectionManager {
         // Status Check
         while self.state == ConnectionState::Status {
             log::info!("Status check!");
-            self.state = match self.player_connection.read().await {
-                Some(packet) => {
+            self.state = match self.next_player_packet().await {
+                Ok(packet) => {
                     let server_status = ServerStatus::new(
                         self.protocol_version.unwrap(),
                         None,
@@ -91,8 +108,8 @@ impl PlayerConnectionManager {
                     );
                     handle_status(&mut self.player_connection, server_status, &packet).await
                 }
-                None => {
-                    log::error!("Invalid/no packet recieved. Disconnecting");
+                Err(e) => {
+                    log::error!("Status TCP Error: {e}");
                     ConnectionState::Disconnecting
                 }
             };
@@ -132,10 +149,10 @@ impl PlayerConnectionManager {
                 }
                 ConnectionState::Play => {
                     tokio::select! {
-                        packet = self.player_connection.read() => {
+                        packet = self.next_player_packet() => {
                             match packet {
-                                Some(packet) => { send_packet_to_server(&mut connection_backend, packet).await; ConnectionState::Play },
-                                None => {log::warn!("Player Connection Disconnected");ConnectionState::Disconnecting},
+                                Ok(packet) => { send_packet_to_server(&mut connection_backend, packet).await; ConnectionState::Play },
+                                Err(e) => {log::warn!("Player Connection Disconnected: {e}");ConnectionState::Disconnecting},
                             }
                         }
                         packet = connection_backend.read_packet() => {
@@ -161,7 +178,7 @@ impl PlayerConnectionManager {
         log::info!("Connection Terminated.");
     }
 
-    async fn next_player_packet(&mut self) -> Option<RawPacket> {
+    async fn next_player_packet(&mut self) -> Result<RawPacket, TcpConnectionError> {
         self.player_connection.read().await
     }
 
@@ -223,6 +240,15 @@ impl PlayerConnectionManager {
             PacketAction::Disconnect => Some(ConnectionState::Disconnecting),
         }
     }
+
+    async fn handle_login(&mut self) -> Result<GameProfile, PlayerConnectionError> {
+        let packet = self.next_player_packet().await?;
+        if packet.id().unwrap().value() != 0 {
+            return Err(LoginSequenceIncorrect("Id not 0"));
+        };
+
+        Ok(GameProfile::default())
+    }
 }
 
 async fn send_packet_to_server<T: ProxyBackend>(connection_backend: &mut T, packet: RawPacket) {
@@ -257,7 +283,11 @@ fn handle_handshake(raw_packet: &RawPacket) -> (ConnectionState, ConnectionProto
 }
 
 // Helper function to handle status flow
-async fn handle_status(connection: &mut TcpConnection, server_status: ServerStatus, packet: &RawPacket) -> ConnectionState {
+async fn handle_status(
+    connection: &mut TcpConnection,
+    server_status: ServerStatus,
+    packet: &RawPacket,
+) -> ConnectionState {
     log::trace!("Incoming Status: {packet}");
     match packet.id().unwrap().value() {
         0 => {

@@ -1,11 +1,31 @@
+use std::num::TryFromIntError;
+
 use bytes::BytesMut;
+use thiserror::Error;
 use tokio_util::codec::Decoder;
 
 use crate::packet::RawPacket;
 use crate::packet::primitives::VarInt;
 use crate::packet::stream::DecodeError;
+use crate::packet::stream::decoder::MinecraftPacketDecoderError::{
+    PacketLengthInvalid, PacketLengthNegative, PacketLengthTooLong,
+};
 
 const MAX_PACKET_SIZE: usize = (1 << 21) - 1; // 2097151 bytes
+
+#[derive(Debug, Error)]
+pub enum MinecraftPacketDecoderError {
+    #[error("IO Error: {0}")]
+    IOError(#[from] std::io::Error),
+    #[error("Packet Length is invalid value: {0}")]
+    InvalidPacketLength(String),
+    #[error("Packet Length Negative: {0}")]
+    PacketLengthNegative(i32),
+    #[error("Packet length could not be converted to usize: {0}")]
+    PacketLengthInvalid(TryFromIntError),
+    #[error("Packet Length is defined too long: {{{0} > {MAX_PACKET_SIZE}}}")]
+    PacketLengthTooLong(usize),
+}
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct MinecraftPacketDecoder {}
@@ -18,37 +38,32 @@ impl MinecraftPacketDecoder {
 
 impl Decoder for MinecraftPacketDecoder {
     type Item = RawPacket;
-    type Error = std::io::Error;
+    type Error = MinecraftPacketDecoderError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         let (packet_length, int_size) = match VarInt::decode_bounded::<3>(src) {
             Ok(value) => value,
             Err(DecodeError::Incomplete) => return Ok(None), // not enough data for a varint
             Err(DecodeError::Invalid(error)) => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Packet Length is invalid value: {error}"),
-                ));
+                return Err(MinecraftPacketDecoderError::InvalidPacketLength(error));
             }
         };
+
+        if packet_length.value() < 0 {
+            return Err(PacketLengthNegative(packet_length.value()));
+        }
 
         // check length is not negative
         let packet_length = match usize::try_from(packet_length) {
             Ok(size) => size,
             Err(error) => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Packet length could not be converted to usize: {error}"),
-                ));
+                return Err(PacketLengthInvalid(error));
             }
         };
 
         // check packet is not too long
         if packet_length > MAX_PACKET_SIZE {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Packet Length is defined too long: {packet_length}"),
-            ));
+            return Err(PacketLengthTooLong(packet_length));
         }
 
         let full_packet_length = packet_length + int_size;
