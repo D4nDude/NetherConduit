@@ -3,6 +3,11 @@ name = "netherconduit-core"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+_tracing = []
+trace-parser = ["_tracing"]
+all-tracing = ["trace-parser"]
+
 [dependencies]
 byteorder = "1.5.0"
 bytes = "1.12.1"
