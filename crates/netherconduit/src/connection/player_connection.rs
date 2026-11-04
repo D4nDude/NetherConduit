@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use log::error;
 use netherconduit_core::{
     connection::ConnectionState,
@@ -5,12 +7,18 @@ use netherconduit_core::{
         RawPacket,
         builder::RawPacketBuilder,
         primitives::GameProfile,
-        types::{HandshakePacket, MinecraftPacket, PingRequestPacket, handshake::HandshakeIntent},
+        stream::{DecodeError, EncodeError},
+        types::{
+            HandshakePacket, MinecraftPacket, PingRequestPacket,
+            handshake::HandshakeIntent,
+            login::{LoginDisconnectPacket, LoginStartPacket, LoginSuccessPacket},
+        },
     },
     server::{protocol_version::ConnectionProtocolVersion, status::ServerStatus},
 };
 use thiserror::Error;
 use tokio::{net::TcpStream, sync::watch::Receiver};
+use uuid::Uuid;
 
 use crate::{
     backend::{ProxyBackend, ProxyServerBackend},
@@ -45,6 +53,10 @@ enum PlayerConnectionError {
     Timeout,
     #[error("Error with player Tcp Connection: {0}.")]
     TcpConnectionError(#[from] TcpConnectionError),
+    #[error("Error decoding player packet: {0}")]
+    PacketDecodeError(#[from] DecodeError),
+    #[error("Error Encoding server packet: {0}")]
+    PacketEncodeError(#[from] EncodeError),
     #[error("Login Packet Sequence was incorrect: {0}.")]
     LoginSequenceIncorrect(&'static str),
 }
@@ -86,7 +98,6 @@ impl PlayerConnectionManager {
                 log::error!("Handshake TCP Error: {e}");
                 self.state = ConnectionState::LoginDisconnect;
                 self.shutdown().await;
-                self.state = ConnectionState::Closed;
                 return;
             }
         };
@@ -115,10 +126,6 @@ impl PlayerConnectionManager {
             };
         }
 
-        while self.state == ConnectionState::Login {
-            self.state = ConnectionState::Play;
-        }
-
         // TODO: Temprary setup of default backend. need to setup based on default
         let mut connection_backend = ProxyServerBackend::new(
             &self.proxy_configuration_reciever.borrow().default_server,
@@ -126,7 +133,41 @@ impl PlayerConnectionManager {
                 .borrow()
                 .default_server_port,
         );
-        connection_backend.init().await.unwrap();
+
+        if self.state == ConnectionState::Login {
+            let (player_profile, _session_id) = match self.login_flow().await {
+                Ok(result) => result,
+                Err(e) => {
+                    error!("Error in Login: {e}");
+                    let disconnect_packet = LoginDisconnectPacket::new(e.to_string().as_ref());
+                    self.send_packet_to_client(disconnect_packet.into_raw().unwrap())
+                        .await;
+                    self.state = ConnectionState::Disconnecting;
+                    self.shutdown().await;
+                    return;
+                }
+            };
+
+            // TODO: Better Init logic
+            match connection_backend.init(&player_profile).await {
+                Ok(_) => {}
+                Err(e) => {
+                    error!("Error in Connecting to backend: {e}, {:?}", e.source());
+                    self.send_packet_to_client(
+                        RawPacketBuilder::new(2)
+                            .unwrap()
+                            .string(e.to_string())
+                            .unwrap()
+                            .build(),
+                    )
+                    .await;
+                    self.state = ConnectionState::Disconnecting;
+                    self.shutdown().await;
+                    return;
+                }
+            };
+            self.state = ConnectionState::Play;
+        }
 
         while self.state != ConnectionState::Disconnecting {
             if self.state != ConnectionState::Play {
@@ -156,9 +197,9 @@ impl PlayerConnectionManager {
                             }
                         }
                         packet = connection_backend.read_packet() => {
-                            match packet.expect("Backend shouldnt close first") {
-                                Some(packet) => { self.send_packet_to_client(packet).await; ConnectionState::Play },
-                                None => {log::warn!("Backend Connection Disconnected");ConnectionState::Disconnecting},
+                            match packet {
+                                Ok(packet) => { self.send_packet_to_client(packet).await; ConnectionState::Play },
+                                Err(e) => {log::warn!("Backend Connection Disconnected: {e}");ConnectionState::Disconnecting},
                             }
                         }
                     }
@@ -241,13 +282,22 @@ impl PlayerConnectionManager {
         }
     }
 
-    async fn handle_login(&mut self) -> Result<GameProfile, PlayerConnectionError> {
+    async fn login_flow(&mut self) -> Result<(GameProfile, Uuid), PlayerConnectionError> {
         let packet = self.next_player_packet().await?;
         if packet.id().unwrap().value() != 0 {
             return Err(LoginSequenceIncorrect("Id not 0"));
         };
+        let login_start_packet = LoginStartPacket::from_raw(&packet)?;
 
-        Ok(GameProfile::default())
+        let player_profile = login_start_packet.into_game_profile();
+        let session_id = Uuid::new_v4();
+
+        // TODO: Encryption and Compression
+
+        let login_success = LoginSuccessPacket::new(player_profile.clone(), session_id);
+        self.send_packet_to_client(login_success.into_raw()?).await;
+
+        Ok((player_profile, session_id))
     }
 }
 
