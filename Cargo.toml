@@ -2,6 +2,9 @@
 resolver = "3"
 members = ["crates/netherconduit", "crates/netherconduit-core"]
 
+[profile.release]
+debug = "limited"
+
 # Separate profile for profiling (keeps release fast)
 [profile.profiling]
 inherits = "release"
