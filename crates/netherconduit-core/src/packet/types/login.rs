@@ -201,8 +201,8 @@ mod test {
 
     #[test]
     fn login_start_packet_round_trip() {
-        use crate::packet::primitives::GameProfile;
         use super::LoginStartPacket;
+        use crate::packet::primitives::GameProfile;
 
         let profile = GameProfile::new(Uuid::new_v4(), &"TestUsername".to_string(), &[]);
 
@@ -235,8 +235,8 @@ mod test {
 
     #[test]
     fn login_success_packet_round_trip() {
-        use crate::packet::primitives::GameProfile;
         use super::LoginSuccessPacket;
+        use crate::packet::primitives::GameProfile;
 
         let profile = GameProfile::new(Uuid::new_v4(), &"TestUsername".to_string(), &[]);
 

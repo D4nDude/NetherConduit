@@ -1,5 +1,8 @@
 use netherconduit_core::packet::{
-    RawPacket, builder::{self, RawPacketBuilder}, primitives::GameProfile, types::{
+    RawPacket,
+    builder::{self, RawPacketBuilder},
+    primitives::GameProfile,
+    types::{
         HandshakePacket, MinecraftPacket,
         login::{LoginSetCompressionPacket, LoginStartPacket, LoginSuccessPacket},
     },
@@ -8,7 +11,8 @@ use tokio::net::TcpStream;
 use uuid::Uuid;
 
 use crate::{
-    backend::{ProxyBackend, ProxyBackendError, server}, connection::TcpConnection,
+    backend::{ProxyBackend, ProxyBackendError, server},
+    connection::TcpConnection,
 };
 
 #[allow(unused)]
@@ -65,10 +69,7 @@ impl ProxyBackend for ProxyServerBackend {
         let server_ack = self.read_packet().await?;
         if server_ack.id()?.value() == 3 {
             let set_compression_packet = LoginSetCompressionPacket::from_raw(&server_ack)?;
-            log::info!(
-                "Server sent: {:?}",
-                set_compression_packet,
-            );
+            log::info!("Server sent: {:?}", set_compression_packet,);
             if let Some(ref mut conn) = self.connection {
                 conn.set_compression(Some(set_compression_packet.threshold.value_usize()?));
             }

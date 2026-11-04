@@ -334,10 +334,7 @@ mod test {
         fn too_long() {
             let test_buffer: Vec<u8> = vec![0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f];
             let result = VarInt::decode(&test_buffer);
-            assert_matches!(
-                result,
-                Err(DecodeError::TooLong)
-            );
+            assert_matches!(result, Err(DecodeError::TooLong));
         }
     }
 }
