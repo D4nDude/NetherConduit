@@ -92,6 +92,7 @@ impl Display for HandshakePacket {
 mod test {
     use crate::packet::types::HandshakePacket;
 
+    use super::super::test::assert_packet_frame_unframe;
     use super::super::test::assert_packet_round_trip;
 
     #[test]
@@ -104,5 +105,17 @@ mod test {
         );
 
         assert_packet_round_trip(packet);
+    }
+
+    #[test]
+    fn handshake_packet_framed_round_trip() {
+        let packet = HandshakePacket::new(
+            crate::server::protocol_version::ConnectionProtocolVersion::MC776,
+            "localhost",
+            25565,
+            super::HandshakeIntent::Login,
+        );
+
+        assert_packet_frame_unframe(packet);
     }
 }
