@@ -12,7 +12,9 @@ impl RawPacketDecodable for String {
         let output_string = match buffer.get(length_bytes..packet_length) {
             Some(value) => value,
             None => {
-                error!("Failed to decode String, length was too short");
+                error!(
+                    "Failed to decode String, length was too short: {string_length} < {packet_length}"
+                );
                 return Err(DecodeError::Incomplete);
             }
         };

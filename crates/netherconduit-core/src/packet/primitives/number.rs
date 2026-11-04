@@ -63,6 +63,16 @@ impl RawPacketDecodable for u16 {
     }
 }
 
+/// WARNING: Not Used by Minecraft
+impl RawPacketDecodable for u32 {
+    fn decode(buffer: &[u8]) -> Result<(Self, usize), DecodeError> {
+        if buffer.len() < 4 {
+            return Err(DecodeError::Incomplete);
+        }
+        Ok((byteorder::BigEndian::read_u32(buffer), 4))
+    }
+}
+
 impl RawPacketDecodable for i32 {
     fn decode(buffer: &[u8]) -> Result<(Self, usize), DecodeError> {
         if buffer.len() < 4 {
@@ -72,12 +82,42 @@ impl RawPacketDecodable for i32 {
     }
 }
 
+/// WARNING: Not Used by Minecraft
+impl RawPacketDecodable for u64 {
+    fn decode(buffer: &[u8]) -> Result<(Self, usize), DecodeError> {
+        if buffer.len() < 8 {
+            return Err(DecodeError::Incomplete);
+        }
+        Ok((byteorder::BigEndian::read_u64(buffer), 8))
+    }
+}
+
 impl RawPacketDecodable for i64 {
     fn decode(buffer: &[u8]) -> Result<(Self, usize), DecodeError> {
         if buffer.len() < 8 {
             return Err(DecodeError::Incomplete);
         }
         Ok((byteorder::BigEndian::read_i64(buffer), 8))
+    }
+}
+
+/// WARNING: Not Used by Minecraft
+impl RawPacketDecodable for u128 {
+    fn decode(buffer: &[u8]) -> Result<(Self, usize), DecodeError> {
+        if buffer.len() < 16 {
+            return Err(DecodeError::Incomplete);
+        }
+        Ok((byteorder::BigEndian::read_u128(buffer), 16))
+    }
+}
+
+/// WARNING: Not Used by Minecraft
+impl RawPacketDecodable for i128 {
+    fn decode(buffer: &[u8]) -> Result<(Self, usize), DecodeError> {
+        if buffer.len() < 16 {
+            return Err(DecodeError::Incomplete);
+        }
+        Ok((byteorder::BigEndian::read_i128(buffer), 16))
     }
 }
 
@@ -165,6 +205,20 @@ impl RawPacketEncodable for u16 {
     }
 }
 
+/// WARNING: Not Used by Minecraft
+impl RawPacketEncodable for u32 {
+    fn encode(&self, buffer: &mut bytes::BytesMut) -> Result<usize, EncodeError> {
+        let buf = &mut [0; 4];
+        byteorder::BigEndian::write_u32(buf, *self);
+        buffer.put(&buf[..]);
+        Ok(4)
+    }
+
+    fn get_encoded_length(&self) -> usize {
+        4
+    }
+}
+
 impl RawPacketEncodable for i32 {
     fn encode(&self, buffer: &mut bytes::BytesMut) -> Result<usize, EncodeError> {
         let buf = &mut [0; 4];
@@ -178,6 +232,20 @@ impl RawPacketEncodable for i32 {
     }
 }
 
+/// WARNING: Not Used by Minecraft
+impl RawPacketEncodable for u64 {
+    fn encode(&self, buffer: &mut bytes::BytesMut) -> Result<usize, EncodeError> {
+        let buf = &mut [0; 8];
+        byteorder::BigEndian::write_u64(buf, *self);
+        buffer.put(&buf[..]);
+        Ok(8)
+    }
+
+    fn get_encoded_length(&self) -> usize {
+        8
+    }
+}
+
 impl RawPacketEncodable for i64 {
     fn encode(&self, buffer: &mut bytes::BytesMut) -> Result<usize, EncodeError> {
         let buf = &mut [0; 8];
@@ -188,6 +256,34 @@ impl RawPacketEncodable for i64 {
 
     fn get_encoded_length(&self) -> usize {
         8
+    }
+}
+
+/// WARNING: Not Used by Minecraft
+impl RawPacketEncodable for u128 {
+    fn encode(&self, buffer: &mut bytes::BytesMut) -> Result<usize, EncodeError> {
+        let buf = &mut [0; 16];
+        byteorder::BigEndian::write_u128(buf, *self);
+        buffer.put(&buf[..]);
+        Ok(16)
+    }
+
+    fn get_encoded_length(&self) -> usize {
+        16
+    }
+}
+
+/// WARNING: Not Used by Minecraft
+impl RawPacketEncodable for i128 {
+    fn encode(&self, buffer: &mut bytes::BytesMut) -> Result<usize, EncodeError> {
+        let buf = &mut [0; 16];
+        byteorder::BigEndian::write_i128(buf, *self);
+        buffer.put(&buf[..]);
+        Ok(16)
+    }
+
+    fn get_encoded_length(&self) -> usize {
+        16
     }
 }
 
@@ -318,8 +414,16 @@ mod test {
     }
 
     // -------------------------------------------------------------------------
-    // int / long
+    // int
     // -------------------------------------------------------------------------
+
+    #[test]
+    fn uint_round_trip() {
+        assert_round_trip(u32::MIN);
+        assert_round_trip(0u32);
+        assert_round_trip(1u32);
+        assert_round_trip(u32::MAX);
+    }
 
     #[test]
     fn int_round_trip() {
@@ -328,6 +432,18 @@ mod test {
         assert_round_trip(0i32);
         assert_round_trip(1i32);
         assert_round_trip(i32::MAX);
+    }
+
+    // -------------------------------------------------------------------------
+    // long
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn ulong_round_trip() {
+        assert_round_trip(u64::MIN);
+        assert_round_trip(0u64);
+        assert_round_trip(1u64);
+        assert_round_trip(u64::MAX);
     }
 
     #[test]
@@ -340,7 +456,28 @@ mod test {
     }
 
     // -------------------------------------------------------------------------
-    // float
+    // longlong
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn ulonglong_round_trip() {
+        assert_round_trip(u128::MIN);
+        assert_round_trip(0u128);
+        assert_round_trip(1u128);
+        assert_round_trip(u128::MAX);
+    }
+
+    #[test]
+    fn longlong_round_trip() {
+        assert_round_trip(i128::MIN);
+        assert_round_trip(-1i128);
+        assert_round_trip(0i128);
+        assert_round_trip(1i128);
+        assert_round_trip(i128::MAX);
+    }
+
+    // -------------------------------------------------------------------------
+    // float / double
     // -------------------------------------------------------------------------
 
     #[test]
@@ -350,6 +487,15 @@ mod test {
         assert_round_trip(-1.0f32);
         assert_round_trip(f32::MIN);
         assert_round_trip(f32::MAX);
+    }
+
+    #[test]
+    fn double_round_trip() {
+        assert_round_trip(0.0f64);
+        assert_round_trip(1.0f64);
+        assert_round_trip(-1.0f64);
+        assert_round_trip(f64::MIN);
+        assert_round_trip(f64::MAX);
     }
 
     // -------------------------------------------------------------------------

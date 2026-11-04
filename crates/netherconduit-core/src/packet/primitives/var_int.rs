@@ -1,6 +1,6 @@
 use std::{fmt::Display, num::TryFromIntError};
 
-use bytes::{BufMut, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 
 use crate::packet::stream::{DecodeError, EncodeError, RawPacketDecodable, RawPacketEncodable};
 
@@ -12,12 +12,26 @@ impl VarInt {
         VarInt(value)
     }
 
+    pub fn from_usize(value: usize) -> Result<VarInt, TryFromIntError> {
+        Ok(VarInt(value.try_into()?))
+    }
+
     pub fn value(self) -> i32 {
         self.0
     }
 
     pub fn value_u32(self) -> Result<u32, TryFromIntError> {
         self.value().try_into()
+    }
+
+    pub fn value_usize(self) -> Result<usize, TryFromIntError> {
+        self.value().try_into()
+    }
+
+    pub fn as_bytes(self) -> Result<Bytes, EncodeError> {
+        let mut buf = BytesMut::with_capacity(self.get_encoded_length());
+        self.encode(&mut buf)?;
+        Ok(buf.freeze())
     }
 
     pub fn decode_bounded<const MAX_BYTES: usize>(
@@ -42,7 +56,7 @@ impl VarInt {
 
             position += 7;
         }
-        Err(DecodeError::Invalid("VarInt is too long".to_string()))
+        Err(DecodeError::TooLong)
     }
 
     pub const fn get_var_int_encoded_length(value: u32) -> usize {
@@ -320,9 +334,9 @@ mod test {
         fn too_long() {
             let test_buffer: Vec<u8> = vec![0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f];
             let result = VarInt::decode(&test_buffer);
-            assert_eq!(
+            assert_matches!(
                 result,
-                Err(DecodeError::Invalid("VarInt is too long".to_string()))
+                Err(DecodeError::TooLong)
             );
         }
     }
