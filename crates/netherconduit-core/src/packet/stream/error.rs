@@ -1,8 +1,15 @@
-use std::{error::Error, fmt::Display, num::TryFromIntError};
+use std::num::TryFromIntError;
+use thiserror::Error;
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, Error)]
 pub enum DecodeError {
+    #[error("IO Error: {0}")]
+    IOError(#[from] std::io::Error),
+    #[error("Decode Error: Incomplete input")]
     Incomplete,
+    #[error("Data is too long")]
+    TooLong,
+    #[error("Decode Error: Invalid value for data type: {0}")]
     Invalid(String),
 }
 
@@ -12,37 +19,16 @@ impl From<TryFromIntError> for DecodeError {
     }
 }
 
-impl From<DecodeError> for std::io::Error {
-    fn from(value: DecodeError) -> Self {
-        match value {
-            DecodeError::Incomplete => std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "Not enough data to create value",
-            ),
-            DecodeError::Invalid(cause) => std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid data format for value: {cause}"),
-            ),
-        }
-    }
-}
-
-impl Display for DecodeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self {
-            DecodeError::Incomplete => write!(f, "Decode Error: Incomplete input"),
-            DecodeError::Invalid(value) => {
-                write!(f, "Decode Error: Invalid value for data type: {}", value)
-            }
-        }
-    }
-}
-
-impl Error for DecodeError {}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, Error)]
 pub enum EncodeError {
+    #[error("IO Error: {0}")]
+    IOError(#[from] std::io::Error),
+    #[error("Encode Error: Invalid value for data type: {0}")]
     Invalid(String),
+    #[error("Encode Error: Value is too long: {0}")]
+    TooLong(String),
+    #[error("Encode Error: Decode Error: {0}")]
+    DecodeError(#[from] DecodeError),
 }
 
 impl From<TryFromIntError> for EncodeError {
