@@ -198,63 +198,45 @@ mod test {
 
     use super::super::test::assert_packet_frame_unframe;
     use super::super::test::assert_packet_round_trip;
-    use crate::packet::primitives::VarInt;
+    use super::LoginDisconnectPacket;
+    use super::LoginSetCompressionPacket;
+    use super::LoginStartPacket;
+    use super::LoginSuccessPacket;
+    use crate::all_round_trip_tests;
+    use paste::paste;
 
-    #[test_log::test]
-    fn login_start_packet_round_trip() {
+    fn login_start_generator() -> LoginStartPacket {
         use super::LoginStartPacket;
         use crate::packet::primitives::GameProfile;
 
         let profile = GameProfile::new(Uuid::new_v4(), "TestUsername", &[]);
 
-        let packet = LoginStartPacket::new(&profile);
-
-        let new_packet = assert_packet_round_trip(packet);
-
-        assert_eq!(profile, new_packet.into_game_profile())
+        LoginStartPacket::new(&profile)
     }
 
-    #[test_log::test]
-    fn login_start_packet_framed_round_trip() {
-        use super::LoginStartPacket;
-        use crate::packet::primitives::GameProfile;
-
-        let profile = GameProfile::new(Uuid::new_v4(), "TestUsername", &[]);
-
-        let packet = LoginStartPacket::new(&profile);
-
-        assert_packet_frame_unframe(packet);
-    }
-
-    #[test]
-    fn login_disconnect_packet_round_trip() {
+    fn login_disconnect_generator() -> LoginDisconnectPacket {
         use super::LoginDisconnectPacket;
 
-        let packet = LoginDisconnectPacket::new("Could not connect to Server.");
-
-        assert_packet_round_trip(packet);
+        LoginDisconnectPacket::new("Could not connect to Server.")
     }
 
-    #[test]
-    fn login_set_compression_packet_round_trip() {
+    fn login_set_compression_generator() -> LoginSetCompressionPacket {
         use super::LoginSetCompressionPacket;
 
-        let packet = LoginSetCompressionPacket::new(256.into());
-
-        let new_packet = assert_packet_round_trip(packet);
-
-        assert_eq!(VarInt::new(256), new_packet.threshold);
+        LoginSetCompressionPacket::new(256.into())
     }
 
-    #[test]
-    fn login_success_packet_round_trip() {
+    fn login_success_packet_generator() -> LoginSuccessPacket {
         use super::LoginSuccessPacket;
         use crate::packet::primitives::GameProfile;
 
         let profile = GameProfile::new(Uuid::new_v4(), "TestUsername", &[]);
 
-        let packet = LoginSuccessPacket::new(profile, Uuid::new_v4());
-
-        assert_packet_round_trip(packet);
+        LoginSuccessPacket::new(profile, Uuid::new_v4())
     }
+
+    all_round_trip_tests!(LoginStartPacket, login_start_generator);
+    all_round_trip_tests!(LoginDisconnectPacket, login_disconnect_generator);
+    all_round_trip_tests!(LoginSetCompressionPacket, login_set_compression_generator);
+    all_round_trip_tests!(LoginSuccessPacket, login_success_packet_generator);
 }

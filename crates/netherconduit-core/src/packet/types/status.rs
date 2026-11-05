@@ -43,12 +43,14 @@ impl Display for PingRequestPacket {
 mod test {
     use super::PingRequestPacket;
 
+    use super::super::test::assert_packet_frame_unframe;
     use super::super::test::assert_packet_round_trip;
+    use crate::all_round_trip_tests;
+    use paste::paste;
 
-    #[test]
-    fn ping_request_packet_round_trip() {
-        let packet = PingRequestPacket::new(25565);
-
-        assert_packet_round_trip(packet);
+    fn ping_request_packet_generator() -> PingRequestPacket {
+        PingRequestPacket::new(25565)
     }
+
+    all_round_trip_tests!(PingRequestPacket, ping_request_packet_generator);
 }

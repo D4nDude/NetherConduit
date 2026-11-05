@@ -30,6 +30,41 @@ mod test {
         stream::{decoder::MinecraftPacketDecoder, encoder::MinecraftPacketEncoder},
     };
 
+    #[macro_export]
+    macro_rules! all_round_trip_tests {
+        ( $name:ident, $generator:path ) => {
+            paste! {
+                #[test_log::test]
+                fn [<$name:snake _decode_then_encode>]() {
+                    let packet = $generator();
+
+                    assert_packet_round_trip(packet);
+                }
+
+                #[test_log::test]
+                fn [<$name:snake _framed_no_compression>]() {
+                    let packet = $generator();
+
+                    assert_packet_frame_unframe(packet, None);
+                }
+
+                #[test_log::test]
+                fn [<$name:snake _framed_under_compression_threshold>]() {
+                    let packet = $generator();
+
+                    assert_packet_frame_unframe(packet, Some(usize::MAX));
+                }
+
+                #[test_log::test]
+                fn [<$name:snake _framed_over_compression_threshold>]() {
+                    let packet = $generator();
+
+                    assert_packet_frame_unframe(packet, Some(0));
+                }
+            }
+        };
+    }
+
     pub(super) fn assert_packet_round_trip<P>(packet: P) -> P
     where
         P: super::MinecraftPacket + PartialEq + std::fmt::Debug + Clone,
@@ -45,7 +80,7 @@ mod test {
         decoded
     }
 
-    pub(super) fn assert_packet_frame_unframe<P>(packet: P) -> P
+    pub(super) fn assert_packet_frame_unframe<P>(packet: P, compresion_threshold: Option<usize>)
     where
         P: super::MinecraftPacket + PartialEq + std::fmt::Debug + Clone,
     {
@@ -53,37 +88,14 @@ mod test {
 
         let raw = packet.into_raw().expect("packet encoding should succeed");
 
-        log::info!("Testing encode/decode with compression unset.");
-        let uncompressed_raw = encode_decode(raw, None);
+        let uncompressed_raw = encode_decode(raw, compresion_threshold);
 
         let decoded = P::from_raw(&uncompressed_raw).expect("packet decoding should succeed");
 
         assert_eq!(
             decoded, expected,
-            "Packet not Framed Correctly, Compression: None"
+            "Packet not Framed Correctly, Compression: {compresion_threshold:?}"
         );
-
-        log::info!("Testing encode/decode with compression set to max threshold.");
-        let not_compressed_raw = encode_decode(uncompressed_raw, Some(usize::MAX));
-
-        let decoded = P::from_raw(&not_compressed_raw).expect("packet decoding should succeed");
-
-        assert_eq!(
-            decoded, expected,
-            "Packet not Framed Correctly, Compression: Some(inf)"
-        );
-
-        log::info!("Testing encode/decode with compression set to min threshold.");
-        let compressed_raw = encode_decode(not_compressed_raw, Some(1));
-
-        let decoded = P::from_raw(&compressed_raw).expect("packet decoding should succeed");
-
-        assert_eq!(
-            decoded, expected,
-            "Packet not Framed Correctly, Compression: Some(1)"
-        );
-
-        decoded
     }
 
     fn encode_decode(packet: RawPacket, compresion_threshold: Option<usize>) -> RawPacket {

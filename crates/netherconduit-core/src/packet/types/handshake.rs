@@ -94,28 +94,17 @@ mod test {
 
     use super::super::test::assert_packet_frame_unframe;
     use super::super::test::assert_packet_round_trip;
+    use crate::all_round_trip_tests;
+    use paste::paste;
 
-    #[test_log::test]
-    fn handshake_packet_round_trip() {
-        let packet = HandshakePacket::new(
+    fn handshake_packet_generator() -> HandshakePacket {
+        HandshakePacket::new(
             crate::server::protocol_version::ConnectionProtocolVersion::MC776,
             "localhost",
             25565,
             super::HandshakeIntent::Login,
-        );
-
-        assert_packet_round_trip(packet);
+        )
     }
 
-    #[test_log::test]
-    fn handshake_packet_framed_round_trip() {
-        let packet = HandshakePacket::new(
-            crate::server::protocol_version::ConnectionProtocolVersion::MC776,
-            "localhost",
-            25565,
-            super::HandshakeIntent::Login,
-        );
-
-        assert_packet_frame_unframe(packet);
-    }
+    all_round_trip_tests!(HandshakePacket, handshake_packet_generator);
 }
