@@ -8,15 +8,15 @@ COPY Cargo.toml .
 COPY Cargo.lock .
 COPY ./crates ./crates
 COPY ./.cargo ./.cargo
-RUN cargo chef prepare --recipe-path recipe.json
+RUN RUSTFLAGS="--cfg tokio_unstable" cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
+COPY ./.cargo ./.cargo
+RUN RUSTFLAGS="--cfg tokio_unstable" cargo chef cook --release --recipe-path recipe.json
 COPY Cargo.toml .
 COPY Cargo.lock .
 COPY ./crates ./crates
-COPY ./.cargo ./.cargo
 RUN RUSTFLAGS="--cfg tokio_unstable" cargo build --release --bin netherconduit
 
 FROM debian:trixie-slim AS runtime
