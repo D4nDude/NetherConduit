@@ -8,12 +8,33 @@ _tracing = []
 trace-parser = ["_tracing"]
 all-tracing = ["trace-parser"]
 
+[lints.rust]
+unknown_lints = "deny"
+renamed_and_removed_lints = "deny"
+# missing_docs = "warn"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+unsafe_code = "deny"
+
+[lints.clippy]
+let_underscore_future = "deny"
+await_holding_invalid_type = "deny"
+await_holding_lock = "deny"
+await_holding_refcell_ref = "deny"
+
+[build-dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+
 [dependencies]
 byteorder = "1.5.0"
 bytes = "1.12.1"
+flate2 = "1.1.10"
 log = "0.4.33"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
+test-log = "0.2.21"
 thiserror = "2.0.21"
 tokio-stream = "0.1.19"
 tokio-util = { version = "0.7.19", features = ["codec"] }

@@ -34,8 +34,8 @@ mod test {
     #[test]
     fn zero_length_packet() {
         // Setup codec
-        let mut decoder = MinecraftPacketDecoder::new();
-        let mut encoder = MinecraftPacketEncoder::new();
+        let mut decoder = MinecraftPacketDecoder::new(None);
+        let mut encoder = MinecraftPacketEncoder::new(None);
 
         // setup test data
         let test_data: BytesMut = BytesMut::from(vec![0x01, 0x00].as_slice());
@@ -56,8 +56,8 @@ mod test {
     #[test]
     fn well_sized_packet() {
         // Setup codec
-        let mut decoder = MinecraftPacketDecoder::new();
-        let mut encoder = MinecraftPacketEncoder::new();
+        let mut decoder = MinecraftPacketDecoder::new(None);
+        let mut encoder = MinecraftPacketEncoder::new(None);
 
         // setup test data
         let test_data: BytesMut = BytesMut::from(vec![0x10; 17].as_slice());
@@ -78,8 +78,8 @@ mod test {
     #[test]
     fn repeated_well_sized_packets() {
         // Setup codec
-        let mut decoder = MinecraftPacketDecoder::new();
-        let mut encoder = MinecraftPacketEncoder::new();
+        let mut decoder = MinecraftPacketDecoder::new(None);
+        let mut encoder = MinecraftPacketEncoder::new(None);
 
         // setup first test data
         let mut test_data: BytesMut = BytesMut::from(vec![0x10; 17].as_slice());
@@ -104,8 +104,8 @@ mod test {
     #[test]
     fn double_well_sized_packets() {
         // Setup codec
-        let mut decoder = MinecraftPacketDecoder::new();
-        let mut encoder = MinecraftPacketEncoder::new();
+        let mut decoder = MinecraftPacketDecoder::new(None);
+        let mut encoder = MinecraftPacketEncoder::new(None);
 
         // setup first test data
         let mut test_data: BytesMut = BytesMut::from(vec![0x10; 17].as_slice());

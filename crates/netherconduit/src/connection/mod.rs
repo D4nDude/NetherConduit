@@ -6,7 +6,7 @@ use netherconduit_core::packet::stream::decoder::MinecraftPacketDecoderError;
 use netherconduit_core::packet::stream::{
     decoder::MinecraftPacketDecoder, encoder::MinecraftPacketEncoder,
 };
-use netherconduit_core::server::protocol_version::ConnectionProtocolVersion;
+// use netherconduit_core::server::protocol_version::ConnectionProtocolVersion;
 use thiserror::Error;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
@@ -17,11 +17,11 @@ use tokio_util::sync::CancellationToken;
 
 pub(crate) mod player_connection;
 
-pub struct MinecraftConnectionConfig {
-    protocol_version: ConnectionProtocolVersion,
-    server_address: String,
-    server_port: u16,
-}
+// pub struct MinecraftConnectionConfig {
+//     protocol_version: ConnectionProtocolVersion,
+//     server_address: String,
+//     server_port: u16,
+// }
 
 #[derive(Debug, Error)]
 pub(crate) enum TcpConnectionError {
@@ -31,8 +31,8 @@ pub(crate) enum TcpConnectionError {
     StreamDisconnected,
     #[error("Error in Decoding Packet: {0}")]
     FramerError(#[from] MinecraftPacketDecoderError),
-    #[error("Timeout Exceeded.")]
-    Timeout,
+    // #[error("Timeout Exceeded.")]
+    // Timeout,
 }
 
 #[derive(Debug)]
@@ -47,10 +47,10 @@ impl TcpConnection {
     pub(crate) fn new(tcp_stream: TcpStream) -> TcpConnection {
         let (read_side, write_side) = tcp_stream.into_split();
 
-        let decoder = MinecraftPacketDecoder::new();
+        let decoder = MinecraftPacketDecoder::new(None);
         let reader = FramedRead::new(read_side, decoder);
 
-        let encoder = MinecraftPacketEncoder::new();
+        let encoder = MinecraftPacketEncoder::new(None);
         let writer = FramedWrite::new(write_side, encoder);
 
         TcpConnection {
@@ -122,5 +122,14 @@ impl TcpConnection {
 
     pub fn is_shutdown(&self) -> bool {
         self.shutdown_token.is_cancelled()
+    }
+
+    pub fn set_compression(&mut self, compression_threshold: Option<usize>) {
+        self.reader
+            .decoder_mut()
+            .set_compression(compression_threshold);
+        self.writer
+            .encoder_mut()
+            .set_compression(compression_threshold);
     }
 }

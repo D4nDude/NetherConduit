@@ -196,10 +196,11 @@ mod test {
 
     use uuid::Uuid;
 
+    use super::super::test::assert_packet_frame_unframe;
     use super::super::test::assert_packet_round_trip;
     use crate::packet::primitives::VarInt;
 
-    #[test]
+    #[test_log::test]
     fn login_start_packet_round_trip() {
         use super::LoginStartPacket;
         use crate::packet::primitives::GameProfile;
@@ -211,6 +212,18 @@ mod test {
         let new_packet = assert_packet_round_trip(packet);
 
         assert_eq!(profile, new_packet.into_game_profile())
+    }
+
+    #[test_log::test]
+    fn login_start_packet_framed_round_trip() {
+        use super::LoginStartPacket;
+        use crate::packet::primitives::GameProfile;
+
+        let profile = GameProfile::new(Uuid::new_v4(), "TestUsername", &[]);
+
+        let packet = LoginStartPacket::new(&profile);
+
+        assert_packet_frame_unframe(packet);
     }
 
     #[test]

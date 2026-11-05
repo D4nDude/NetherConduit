@@ -95,7 +95,7 @@ mod test {
     use super::super::test::assert_packet_frame_unframe;
     use super::super::test::assert_packet_round_trip;
 
-    #[test]
+    #[test_log::test]
     fn handshake_packet_round_trip() {
         let packet = HandshakePacket::new(
             crate::server::protocol_version::ConnectionProtocolVersion::MC776,

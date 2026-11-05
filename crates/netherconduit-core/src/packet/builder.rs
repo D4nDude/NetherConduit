@@ -23,7 +23,7 @@ impl RawPacketBuilder {
     }
 
     pub fn build(self) -> RawPacket {
-        RawPacket::from_data(self.data.freeze())
+        RawPacket::new(self.data.freeze())
     }
 
     pub fn put(mut self, data: impl RawPacketEncodable) -> Result<Self, EncodeError> {
