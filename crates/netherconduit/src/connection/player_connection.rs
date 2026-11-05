@@ -139,7 +139,11 @@ impl PlayerConnectionManager {
                 Ok(result) => result,
                 Err(e) => {
                     error!("Error in Login: {e}");
-                    let disconnect_packet = LoginDisconnectPacket::new(e.to_string().as_ref());
+                    let disconnect_packet = LoginDisconnectPacket::new(
+                        format!("{{\"text\": \"Error in Login: {e}\"}}")
+                            .to_string()
+                            .as_ref(),
+                    );
                     self.send_packet_to_client(disconnect_packet.into_raw().unwrap())
                         .await;
                     self.state = ConnectionState::Disconnecting;
