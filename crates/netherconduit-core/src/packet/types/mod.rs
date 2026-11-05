@@ -53,6 +53,7 @@ mod test {
 
         let raw = packet.into_raw().expect("packet encoding should succeed");
 
+        log::info!("Testing encode/decode with compression unset.");
         let uncompressed_raw = encode_decode(raw, None);
 
         let decoded = P::from_raw(&uncompressed_raw).expect("packet decoding should succeed");
@@ -62,6 +63,7 @@ mod test {
             "Packet not Framed Correctly, Compression: None"
         );
 
+        log::info!("Testing encode/decode with compression set to max threshold.");
         let not_compressed_raw = encode_decode(uncompressed_raw, Some(usize::MAX));
 
         let decoded = P::from_raw(&not_compressed_raw).expect("packet decoding should succeed");
@@ -71,6 +73,7 @@ mod test {
             "Packet not Framed Correctly, Compression: Some(inf)"
         );
 
+        log::info!("Testing encode/decode with compression set to min threshold.");
         let compressed_raw = encode_decode(not_compressed_raw, Some(1));
 
         let decoded = P::from_raw(&compressed_raw).expect("packet decoding should succeed");
