@@ -7,6 +7,7 @@ use crate::packet::{
     stream::{EncodeError, RawPacketEncodable},
 };
 
+#[derive(Debug)]
 pub struct RawPacketBuilder {
     data: BytesMut,
 }

@@ -1,4 +1,6 @@
-use log::{info, warn};
+use log::info;
+#[cfg(feature = "debug")]
+use log::warn;
 
 mod backend;
 mod connection;

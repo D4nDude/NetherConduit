@@ -204,7 +204,7 @@ mod test {
         use super::LoginStartPacket;
         use crate::packet::primitives::GameProfile;
 
-        let profile = GameProfile::new(Uuid::new_v4(), &"TestUsername".to_string(), &[]);
+        let profile = GameProfile::new(Uuid::new_v4(), "TestUsername", &[]);
 
         let packet = LoginStartPacket::new(&profile);
 
@@ -238,7 +238,7 @@ mod test {
         use super::LoginSuccessPacket;
         use crate::packet::primitives::GameProfile;
 
-        let profile = GameProfile::new(Uuid::new_v4(), &"TestUsername".to_string(), &[]);
+        let profile = GameProfile::new(Uuid::new_v4(), "TestUsername", &[]);
 
         let packet = LoginSuccessPacket::new(profile, Uuid::new_v4());
 

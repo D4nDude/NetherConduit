@@ -1,6 +1,6 @@
 use crate::server::protocol_version::ConnectionProtocolVersion;
 
-#[derive()]
+#[derive(Debug)]
 pub enum PacketType {
     // Handshake
     Handshake,

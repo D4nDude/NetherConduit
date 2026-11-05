@@ -49,8 +49,8 @@ pub(crate) struct PlayerConnectionManager {
 
 #[derive(Debug, Error)]
 enum PlayerConnectionError {
-    #[error("Packet not recieved before timeout exceeded.")]
-    Timeout,
+    // #[error("Packet not recieved before timeout exceeded.")]
+    // Timeout,
     #[error("Error with player Tcp Connection: {0}.")]
     TcpConnectionError(#[from] TcpConnectionError),
     #[error("Error decoding player packet: {0}")]
@@ -228,6 +228,7 @@ impl PlayerConnectionManager {
         self.player_connection.send(packet).await
     }
 
+    #[allow(dead_code)]
     async fn handle_action<T: ProxyBackend>(
         &mut self,
         backend: &mut T,

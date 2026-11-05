@@ -1,6 +1,6 @@
 use netherconduit_core::packet::{
     RawPacket,
-    builder::{self, RawPacketBuilder},
+    builder::RawPacketBuilder,
     primitives::GameProfile,
     types::{
         HandshakePacket, MinecraftPacket,
@@ -11,7 +11,7 @@ use tokio::net::TcpStream;
 use uuid::Uuid;
 
 use crate::{
-    backend::{ProxyBackend, ProxyBackendError, server},
+    backend::{ProxyBackend, ProxyBackendError},
     connection::TcpConnection,
 };
 
@@ -81,7 +81,7 @@ impl ProxyBackend for ProxyServerBackend {
             )));
         }
 
-        log::debug!("Server_ack: {}", &server_ack);
+        log::debug!("Server_ack: {}", server_ack);
         let server_ack_packet = LoginSuccessPacket::from_raw(&server_ack)?;
         self.session_id = Some(server_ack_packet.session_id);
 
