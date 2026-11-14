@@ -32,15 +32,19 @@ impl Encoder<RawPacket> for MinecraftPacketEncoder {
     fn encode(&mut self, item: RawPacket, dst: &mut BytesMut) -> Result<(), Self::Error> {
         match self.compression_threshold {
             None => {
-                VarInt::from_usize(item.len())?.encode(dst)?;
-                dst.extend_from_slice(item.raw_data());
+                VarInt::from_usize(item.data()?.len())?.encode(dst)?;
+                if item.compressed {
+                    dst.extend_from_slice(&item.data()?);
+                } else {
+                    dst.extend_from_slice(item.raw_data());
+                }
                 Ok(())
             }
             Some(threshold) => {
                 let data = item.data()?;
-                if data.len() < threshold {
+                if item.compressed || (data.len() < threshold) {
                     // UnCompressed packet length
-                    VarInt::from_usize(1 + item.len())?.encode(dst)?;
+                    VarInt::from_usize(1 + data.len())?.encode(dst)?;
                     dst.put_u8(0u8);
                     dst.extend_from_slice(data.as_ref());
                     Ok(())

@@ -304,6 +304,11 @@ impl PlayerConnectionManager {
         let login_success = LoginSuccessPacket::new(player_profile.clone(), session_id);
         self.send_packet_to_client(login_success.into_raw()?).await;
 
+        let packet = self.next_player_packet().await?;
+        if packet.id().unwrap().value() != 3 {
+            return Err(LoginSequenceIncorrect("Id not 3"));
+        };
+
         Ok((player_profile, session_id))
     }
 }

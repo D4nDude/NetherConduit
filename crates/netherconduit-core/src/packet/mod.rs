@@ -74,10 +74,7 @@ impl RawPacket {
 
     pub fn split(&self) -> Result<(VarInt, Bytes), DecodeError> {
         let (id, id_len) = VarInt::decode(&self.data()?)?;
-        Ok((
-            id,
-            self.data()?.slice(id_len..),
-        ))
+        Ok((id, self.data()?.slice(id_len..)))
     }
 }
 
@@ -88,10 +85,9 @@ impl Display for RawPacket {
         } else if self.compressed {
             write!(
                 f,
-                "(id:{},compressed:0x{:x},0x{:x})",
+                "(id:{},uncompressed:0x{:x})",
                 self.id().unwrap(),
-                self.payload().unwrap(),
-                self.data().unwrap()
+                self.payload().unwrap()
             )
         } else {
             write!(

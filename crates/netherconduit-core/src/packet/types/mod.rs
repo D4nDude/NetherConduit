@@ -109,7 +109,7 @@ mod test {
             Err(e) => panic!("Error while encoding: {e}"),
         };
 
-        match decoder.decode(&mut buffer) {
+        let output_packet = match decoder.decode(&mut buffer) {
             Ok(x) => match x {
                 Some(value) => value,
                 None => {
@@ -117,6 +117,8 @@ mod test {
                 }
             },
             Err(e) => panic!("Error while encoding: {e}"),
-        }
+        };
+        assert!(buffer.is_empty(), "Decoder did not consume entire buffer");
+        output_packet
     }
 }
