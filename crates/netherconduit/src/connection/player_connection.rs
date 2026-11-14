@@ -151,6 +151,7 @@ impl PlayerConnectionManager {
                     return;
                 }
             };
+            log::info!("Client Login Success! Profile: {player_profile:?}");
 
             // TODO: Better Init logic
             match connection_backend.init(&player_profile).await {
@@ -228,7 +229,8 @@ impl PlayerConnectionManager {
     }
 
     async fn send_packet_to_client(&mut self, packet: RawPacket) {
-        // log::debug!("Sending to Client: {:?}", packet);
+        #[cfg(feature = "trace-packets")]
+        log::trace!("Sending to Client: {}", packet);
         self.player_connection.send(packet).await
     }
 
@@ -307,7 +309,8 @@ impl PlayerConnectionManager {
 }
 
 async fn send_packet_to_server<T: ProxyBackend>(connection_backend: &mut T, packet: RawPacket) {
-    // log::debug!("Sending to Server: {:?}", packet);
+    #[cfg(feature = "trace-packets")]
+    log::trace!("Sending to Server: {}", packet);
     connection_backend
         .send_packet(packet)
         .await

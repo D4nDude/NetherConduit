@@ -62,6 +62,7 @@ impl ProxyBackend for ProxyServerBackend {
         conn.send(handshake_info.into_raw()?).await;
         self.connection = Some(conn);
         log::info!("Connected to backend!");
+
         // Login!
 
         let login_start_packet = LoginStartPacket::new(player_profile);
@@ -83,9 +84,12 @@ impl ProxyBackend for ProxyServerBackend {
 
         log::debug!("Server_ack: {}", server_ack);
         let server_ack_packet = LoginSuccessPacket::from_raw(&server_ack)?;
+        log::debug!("Ack Decoded: {:?}", server_ack_packet);
         self.session_id = Some(server_ack_packet.session_id);
 
         self.send_packet(RawPacketBuilder::new(3)?.build()).await?;
+
+        log::info!("Server backend login Successful!");
 
         Ok(())
     }

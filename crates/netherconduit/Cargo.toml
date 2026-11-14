@@ -4,8 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-debug = []
-tokio-console = ["debug", "dep:console-subscriber"]
+_debugging = []
+all-debugging = ["tokio-console", "trace-packets"]
+tokio-console = ["_debugging", "dep:console-subscriber"]
+trace-packets = ["_debugging"]
 
 [dependencies]
 anyhow = "1.0.104"

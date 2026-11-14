@@ -1,5 +1,5 @@
 use log::info;
-#[cfg(feature = "debug")]
+#[cfg(feature = "_debugging")]
 use log::warn;
 
 mod backend;
@@ -19,7 +19,7 @@ async fn main() {
 
     info!("Starting Proxy! pid: {pid}");
 
-    #[cfg(feature = "debug")]
+    #[cfg(feature = "_debugging")]
     warn!("DEBUG MODE ENABLED! DO NOT USE IN PRODUCTION");
 
     let proxy_config = core::proxy::ProxyConfig::new();
