@@ -6,7 +6,8 @@ edition = "2024"
 [features]
 _tracing = []
 trace-parser = ["_tracing"]
-all-tracing = ["trace-parser"]
+trace-decoder = ["_tracing"]
+all-tracing = ["trace-parser", "trace-decoder"]
 
 [lints.rust]
 unknown_lints = "deny"

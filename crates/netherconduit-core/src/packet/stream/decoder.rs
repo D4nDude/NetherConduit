@@ -54,6 +54,7 @@ impl Decoder for MinecraftPacketDecoder {
         let (packet_length, int_size) = match VarInt::decode_bounded::<3>(src) {
             Ok(value) => value,
             Err(DecodeError::Incomplete) => {
+                #[cfg(feature = "trace-decoder")]
                 log::trace!("Not enough data for a VarInt decode");
                 return Ok(None);
             } // not enough data for a varint
@@ -89,6 +90,7 @@ impl Decoder for MinecraftPacketDecoder {
 
         // incomplete packet
         if src.len() < full_packet_length {
+            #[cfg(feature = "trace-decoder")]
             log::trace!(
                 "Buffer not long enough to decode packet: {} < {full_packet_length}",
                 src.len()
