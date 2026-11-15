@@ -8,13 +8,9 @@ use netherconduit_core::{
         builder::RawPacketBuilder,
         primitives::GameProfile,
         stream::{DecodeError, EncodeError},
-        types::{
-            HandshakePacket, MinecraftPacket, PingRequestPacket,
-            handshake::HandshakeIntent,
-            login::{LoginDisconnectPacket, LoginStartPacket, LoginSuccessPacket},
-        },
+        types::{MinecraftPacket, login::LoginDisconnectPacket},
     },
-    server::{protocol_version::ConnectionProtocolVersion, status::ServerStatus},
+    server::status::ServerStatus,
 };
 use thiserror::Error;
 use tokio::{net::TcpStream, sync::watch::Receiver};
@@ -24,7 +20,9 @@ use crate::{
     backend::{ProxyBackend, ProxyServerBackend},
     connection::{
         TcpConnection, TcpConnectionError,
-        player_connection::PlayerConnectionError::LoginSequenceIncorrect,
+        handshake::{HandshakeResult, handle_handshake},
+        login::handle_login,
+        status::handle_status,
     },
     core::proxy::ProxyConfig,
 };
@@ -43,12 +41,11 @@ pub(crate) enum PacketAction {
 pub(crate) struct PlayerConnectionManager {
     state: ConnectionState,
     player_connection: TcpConnection,
-    protocol_version: Option<ConnectionProtocolVersion>,
     proxy_configuration_reciever: Receiver<ProxyConfig>,
 }
 
 #[derive(Debug, Error)]
-enum PlayerConnectionError {
+pub(crate) enum PlayerConnectionError {
     // #[error("Packet not recieved before timeout exceeded.")]
     // Timeout,
     #[error("Error with player Tcp Connection: {0}.")]
@@ -61,16 +58,20 @@ enum PlayerConnectionError {
     LoginSequenceIncorrect(&'static str),
 }
 
-// #[derive(Debug)]
-// pub(crate) struct PlayerConnectionError {
-//     pub(crate) error: Error,
-// }
+#[derive(Debug)]
+pub(super) struct PlayContext {
+    player_profile: GameProfile,
+    _session_id: Uuid,
+}
 
-// impl PlayerConnectionError {
-//     pub fn new(error: Error) -> Self {
-//         PlayerConnectionError { error }
-//     }
-// }
+impl PlayContext {
+    pub fn new(player_profile: GameProfile, session_id: Uuid) -> Self {
+        PlayContext {
+            player_profile,
+            _session_id: session_id,
+        }
+    }
+}
 
 impl PlayerConnectionManager {
     pub(crate) async fn new(
@@ -82,7 +83,6 @@ impl PlayerConnectionManager {
         PlayerConnectionManager {
             state: ConnectionState::Handshake,
             player_connection,
-            protocol_version: None,
             proxy_configuration_reciever,
         }
     }
@@ -92,8 +92,8 @@ impl PlayerConnectionManager {
 
         // First the handshake
         log::info!("Handshaking");
-        let (initial_state, protocol_version) = match self.next_player_packet().await {
-            Ok(packet) => handle_handshake(&packet),
+        let handshake_result = match handle_handshake(&mut self.player_connection).await {
+            Ok(result) => result,
             Err(e) => {
                 log::error!("Handshake TCP Error: {e}");
                 self.state = ConnectionState::LoginDisconnect;
@@ -101,30 +101,58 @@ impl PlayerConnectionManager {
                 return;
             }
         };
-        self.state = initial_state;
-        self.protocol_version = Some(protocol_version);
 
-        // Status Check
-        while self.state == ConnectionState::Status {
-            log::info!("Status check!");
-            self.state = match self.next_player_packet().await {
-                Ok(packet) => {
-                    let server_status = ServerStatus::new(
-                        self.protocol_version.unwrap(),
-                        None,
-                        self.proxy_configuration_reciever
-                            .borrow()
-                            .description
-                            .as_str(),
-                    );
-                    handle_status(&mut self.player_connection, server_status, &packet).await
+        // Status
+
+        let play_context: PlayContext = match handshake_result {
+            HandshakeResult::Status(mut status_ctx) => {
+                log::info!("Status check!");
+                let server_status = ServerStatus::new(
+                    status_ctx.protocol_version,
+                    None,
+                    self.proxy_configuration_reciever
+                        .borrow()
+                        .description
+                        .as_str(),
+                );
+                match handle_status(&mut self.player_connection, &mut status_ctx, server_status)
+                    .await
+                {
+                    Ok(_) => (),
+                    Err(e) => {
+                        log::error!("Handshake TCP Error: {e}");
+                    }
+                };
+                self.state = ConnectionState::LoginDisconnect;
+                self.shutdown().await;
+                return;
+            }
+            HandshakeResult::Login(context) => {
+                match handle_login(&mut self.player_connection, context).await {
+                    Ok(result) => result,
+                    Err(e) => {
+                        error!("Error in Login: {e}");
+                        let disconnect_packet = LoginDisconnectPacket::new(
+                            format!("{{\"text\": \"Error in Login: {e}\"}}")
+                                .to_string()
+                                .as_ref(),
+                        );
+                        self.send_packet_to_client(disconnect_packet.into_raw().unwrap())
+                            .await;
+                        self.state = ConnectionState::Disconnecting;
+                        self.shutdown().await;
+                        return;
+                    }
                 }
-                Err(e) => {
-                    log::error!("Status TCP Error: {e}");
-                    ConnectionState::Disconnecting
-                }
-            };
-        }
+            }
+        };
+
+        log::info!(
+            "Client Login Success! Profile: {:?}",
+            play_context.player_profile
+        );
+
+        self.state = ConnectionState::Login;
 
         // TODO: Temprary setup of default backend. need to setup based on default
         let mut connection_backend = ProxyServerBackend::new(
@@ -134,45 +162,25 @@ impl PlayerConnectionManager {
                 .default_server_port,
         );
 
-        if self.state == ConnectionState::Login {
-            let (player_profile, _session_id) = match self.login_flow().await {
-                Ok(result) => result,
-                Err(e) => {
-                    error!("Error in Login: {e}");
-                    let disconnect_packet = LoginDisconnectPacket::new(
-                        format!("{{\"text\": \"Error in Login: {e}\"}}")
-                            .to_string()
-                            .as_ref(),
-                    );
-                    self.send_packet_to_client(disconnect_packet.into_raw().unwrap())
-                        .await;
-                    self.state = ConnectionState::Disconnecting;
-                    self.shutdown().await;
-                    return;
-                }
-            };
-            log::info!("Client Login Success! Profile: {player_profile:?}");
-
-            // TODO: Better Init logic
-            match connection_backend.init(&player_profile).await {
-                Ok(_) => {}
-                Err(e) => {
-                    error!("Error in Connecting to backend: {e}, {:?}", e.source());
-                    self.send_packet_to_client(
-                        RawPacketBuilder::new(2)
-                            .unwrap()
-                            .string(e.to_string())
-                            .unwrap()
-                            .build(),
-                    )
-                    .await;
-                    self.state = ConnectionState::Disconnecting;
-                    self.shutdown().await;
-                    return;
-                }
-            };
-            self.state = ConnectionState::Play;
-        }
+        // TODO: Better Init logic
+        match connection_backend.init(&play_context.player_profile).await {
+            Ok(_) => {}
+            Err(e) => {
+                error!("Error in Connecting to backend: {e}, {:?}", e.source());
+                self.send_packet_to_client(
+                    RawPacketBuilder::new(2)
+                        .unwrap()
+                        .string(e.to_string())
+                        .unwrap()
+                        .build(),
+                )
+                .await;
+                self.state = ConnectionState::Disconnecting;
+                self.shutdown().await;
+                return;
+            }
+        };
+        self.state = ConnectionState::Play;
 
         while self.state != ConnectionState::Disconnecting {
             if self.state != ConnectionState::Play {
@@ -288,29 +296,6 @@ impl PlayerConnectionManager {
             PacketAction::Disconnect => Some(ConnectionState::Disconnecting),
         }
     }
-
-    async fn login_flow(&mut self) -> Result<(GameProfile, Uuid), PlayerConnectionError> {
-        let packet = self.next_player_packet().await?;
-        if packet.id().unwrap().value() != 0 {
-            return Err(LoginSequenceIncorrect("Id not 0"));
-        };
-        let login_start_packet = LoginStartPacket::from_raw(&packet)?;
-
-        let player_profile = login_start_packet.into_game_profile();
-        let session_id = Uuid::new_v4();
-
-        // TODO: Encryption and Compression
-
-        let login_success = LoginSuccessPacket::new(player_profile.clone(), session_id);
-        self.send_packet_to_client(login_success.into_raw()?).await;
-
-        let packet = self.next_player_packet().await?;
-        if packet.id().unwrap().value() != 3 {
-            return Err(LoginSequenceIncorrect("Id not 3"));
-        };
-
-        Ok((player_profile, session_id))
-    }
 }
 
 async fn send_packet_to_server<T: ProxyBackend>(connection_backend: &mut T, packet: RawPacket) {
@@ -320,74 +305,4 @@ async fn send_packet_to_server<T: ProxyBackend>(connection_backend: &mut T, pack
         .send_packet(packet)
         .await
         .expect("Could not send to server")
-}
-
-// Helper function to handle handshake flow
-fn handle_handshake(raw_packet: &RawPacket) -> (ConnectionState, ConnectionProtocolVersion) {
-    let packet = match HandshakePacket::from_raw(raw_packet) {
-        Ok(value) => value,
-        Err(e) => {
-            log::error!("Decode Error: {:?}", e);
-            return (
-                ConnectionState::LoginDisconnect,
-                ConnectionProtocolVersion::default(),
-            );
-        }
-    };
-    log::trace!("Incoming Handshake: {packet}");
-    (
-        match packet.intent {
-            HandshakeIntent::Status => ConnectionState::Status,
-            HandshakeIntent::Login => ConnectionState::Login,
-            HandshakeIntent::Transfer => ConnectionState::Login,
-        },
-        packet.protocol_version,
-    )
-}
-
-// Helper function to handle status flow
-async fn handle_status(
-    connection: &mut TcpConnection,
-    server_status: ServerStatus,
-    packet: &RawPacket,
-) -> ConnectionState {
-    log::trace!("Incoming Status: {packet}");
-    match packet.id().unwrap().value() {
-        0 => {
-            log::debug!("Status Check");
-            let return_packet = RawPacketBuilder::new(0)
-                .unwrap()
-                .string(
-                    server_status
-                        .to_json()
-                        .expect("Should be valid status encoding"),
-                )
-                .unwrap()
-                .build();
-            connection.send(return_packet).await;
-            ConnectionState::Status
-            // PacketAction::ReturnAnd(return_packet, Box::new(PacketAction::Disconnect))
-        }
-        1 => {
-            let ping_request_packet = match PingRequestPacket::from_raw(packet) {
-                Ok(value) => value,
-                Err(e) => {
-                    log::error!("Decode Error: {:?}", e);
-                    return ConnectionState::Disconnecting;
-                }
-            };
-            log::debug!("Ping Request: {:#?}", ping_request_packet);
-            let return_packet = RawPacketBuilder::new(1)
-                .unwrap()
-                .long(ping_request_packet.payload)
-                .unwrap()
-                .build();
-            connection.send(return_packet).await;
-            ConnectionState::Disconnecting
-        }
-        value => {
-            log::warn!("Invalid status packet ID: {value}");
-            ConnectionState::Disconnecting
-        }
-    }
 }

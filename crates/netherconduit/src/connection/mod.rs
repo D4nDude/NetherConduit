@@ -15,7 +15,10 @@ use tokio_stream::StreamExt;
 use tokio_util::codec::{FramedRead, FramedWrite};
 use tokio_util::sync::CancellationToken;
 
+mod handshake;
+mod login;
 pub(crate) mod player_connection;
+mod status;
 
 // pub struct MinecraftConnectionConfig {
 //     protocol_version: ConnectionProtocolVersion,
