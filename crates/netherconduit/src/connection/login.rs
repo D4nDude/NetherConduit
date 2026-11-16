@@ -23,7 +23,7 @@ pub(super) async fn handle_login(
     _context: LoginContext,
 ) -> Result<PlayContext, PlayerConnectionError> {
     let packet = connection.read().await?;
-    if packet.id().unwrap().value() != 0 {
+    if packet.id()?.value() != 0 {
         return Err(PlayerConnectionError::LoginSequenceIncorrect("Id not 0"));
     };
     let login_start_packet = LoginStartPacket::from_raw(&packet)?;
@@ -37,7 +37,7 @@ pub(super) async fn handle_login(
     connection.send(login_success.into_raw()?).await;
 
     let packet = connection.read().await?;
-    if packet.id().unwrap().value() != 3 {
+    if packet.id()?.value() != 3 {
         return Err(PlayerConnectionError::LoginSequenceIncorrect("Id not 3"));
     };
 
